@@ -24,6 +24,7 @@ import nibabel as nib
 import matplotlib.pyplot as plt
 from tqdm import tqdm as tq
 from scipy.ndimage import rotate
+import time
 
 
 torch.cuda.empty_cache()
@@ -175,17 +176,28 @@ class l1dist(nn.Module):
 #%%
 
 
-data_path = '/home/c/mood/data/%s'%task
+data_path = 'data/%s'%task
 
 
-####TEST THIS SHIT
 def intensity_perturbation_2d(x):
-    m = x[x>0]; i=0; j=0
+    m = x>0; 
+    i,j = np.random.choice(range(x.shape[0]), size=2)
     while(m[i,j]==0):
         i,j = np.random.choice(range(x.shape[0]), size=2)
-    x[i-10:i+10,j-10:j+10] *= .5
+    size = int(np.random.choice(np.linspace(.1,.5,100))*np.min([i,j]))
+    x[i-size:i+size,j-size:j+size] *= .5
     return x
-####TEST THIS SHIT
+
+def inpaint_3d(x):
+    s = x.shape[0]
+    m = x>0; 
+    i,j,k = np.random.choice(range(s), size=3)
+    while(m[i,j,k]==0):
+        i,j,k = np.random.choice(range(s), size=3)
+    size = int(np.random.choice(np.linspace(8,np.min([i,s-i,j,s-j,k,s-k]),100)))
+    x[i-size:i+size,j-size:j+size,k-size:k+size] = 0
+    return x
+    
 
     
     
@@ -194,14 +206,17 @@ def projection(data):
     res_per = []; res_ori = []
     for ra in rand_angle:
         rot = rotate(data, angle=ra, axes=(0,2), reshape=False)
-        rot = np.sum(rot,axis=0)
-        rot /= np.quantile(rot,.98); rot[rot>1]=1
-        rot = np.expand_dims(rot,0)
-        res_ori.append(rot)
+        ori = rot.copy(); per = rot.copy()
         
+        ori = np.sum(ori,axis=0)
+        ori /= np.quantile(ori,.98); ori[ori>1]=1
+        res_ori.append(np.expand_dims(ori,0))
         
-        
-        
+        per = inpaint_3d(per)
+        per = np.sum(per,axis=0)
+        per /= np.quantile(per,.98); per[per>1]=1
+        res_per.append(np.expand_dims(per,0))
+
     return [np.stack(res_per,axis=0), np.stack(res_ori,axis=0)]
 
 class MedDataset(Dataset):
@@ -209,7 +224,8 @@ class MedDataset(Dataset):
             self,
             datatype: str = 'train',
             path: str = data_path,
-            img_ids: np.array = None
+            img_ids: np.array = None,
+            disturb_input = True
         ):
             # self.df = df
             if datatype == 'train':
@@ -217,6 +233,7 @@ class MedDataset(Dataset):
             else:
                 self.img_folder  = f"{path}/toy"
             self.img_ids = img_ids
+            self.disturb_input = disturb_input
             
     def __getitem__(self,idx):
         image_name = self.img_ids[idx]
@@ -227,7 +244,10 @@ class MedDataset(Dataset):
         # data = np.expand_dims(data,1)
         # per_data = generate_artifacts(data)
         # matrix = nifti.affine
-        return per_data, data
+        if self.disturb_input:
+            return per_data, ori_data
+        else:
+            return ori_data, ori_data
     
     def __len__(self):
         return(len(self.img_ids))
@@ -244,7 +264,8 @@ vali_dataset = MedDataset(
     img_ids = vali_ids)
 test_dataset = MedDataset(
     datatype = 'test',
-    img_ids = test_ids)
+    img_ids = test_ids,
+    disturb_input = False)
 
 #%%
 
@@ -271,7 +292,7 @@ test_loader = DataLoader(
     num_workers = 6)
 
 
-n_epochs = 5
+n_epochs = 50
 train_loss_list = []
 valid_loss_list = []
 dice_score_list =  []
@@ -350,6 +371,47 @@ for epoch in range(1, n_epochs+1):
         valid_loss_min = valid_loss
     
     scheduler.step(valid_loss)
+    
+    ######################    
+    # test the model #
+    ######################
+    model.eval()
+    del data, target
+    preds = []; gts = []; uncers=[]
+    count = 0
+    for data, target in tq(test_loader):
+        if train_on_gpu:
+            data = data.cuda()
+        target = target.cpu().detach().numpy()
+        pred,uncer = model(data)
+        pred = pred.cpu().detach().numpy()
+        uncer = uncer.cpu().detach().numpy()
+        preds.append(pred[0]); gts.append(target[0]); uncers.append(uncer[0])
+    preds = np.concatenate(preds,0)
+    gts = np.concatenate(gts,0)
+    uncers = np.concatenate(uncers,0)
+
+    fig, ax = plt.subplots(4,4,figsize=(12,10)); 
+    for j in [0,1,2,3]:
+        
+        im = ax[j,0].imshow(gts[j,0], cmap='Greys_r')
+        ax[j,0].axis('off')
+        plt.colorbar(im,ax=ax[j,0])
+        
+        im = ax[j,1].imshow(preds[j,0], cmap='Greys_r')
+        ax[j,1].axis('off')
+        plt.colorbar(im,ax=ax[j,1])
+        
+        im = ax[j,2].imshow(np.abs(gts[j,0]-preds[j,0]), cmap='gist_rainbow')
+        ax[j,2].axis('off')
+        plt.colorbar(im,ax=ax[j,2])
+        
+        im = ax[j,3].imshow(uncers[j,0], cmap='gist_rainbow')
+        ax[j,3].axis('off')
+        plt.colorbar(im,ax=ax[j,3])
+        
+    fig.tight_layout(pad=.1)
+    plt.savefig('plots/%d'%time.time())
 
 #%%
 
@@ -410,7 +472,7 @@ for j in [0,1,2,3]:
     plt.colorbar(im,ax=ax[j,3])
     
 fig.tight_layout(pad=.1)
-plt.show()
+plt.savefig('plots/%d'%time.time())
 
 
 
