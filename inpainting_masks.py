@@ -9,9 +9,9 @@ from matplotlib import cm
 import matplotlib.colors as colors
 from scipy import ndimage, misc
 
-def define_random_mask(N=256, prop = 0.005):
+def define_random_mask(N=256, prop = np.random.uniform(0,.05)):
     f = np.zeros([N, N, N])
-    a = N*.5
+    a = N*.25
     x = np.linspace(-N/2, N/2-1, N)
     X,Y,Z = np.meshgrid(x,x,x)
     

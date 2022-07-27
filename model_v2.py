@@ -8,9 +8,14 @@ Created on Tue Jul 26 14:30:11 2022
 
 #%%
 
+# define the task [brain,abdom] and the corresponding data directory
+
 task = 'brain'
+data_path = 'data/%s'%task
 
 #%%
+
+#load packages
 
 import torch
 torch.cuda.get_device_name(0)
@@ -25,14 +30,22 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm as tq
 from scipy.ndimage import rotate
 import time
-from inpainting_masks import define_random_mask
+from skimage.measure import block_reduce
 
+#%%
+
+#empty cuda cache and check, if GPU is available
 
 torch.cuda.empty_cache()
 gc.collect()
 train_on_gpu = torch.cuda.is_available()
+# from numba import cuda
+# cuda.select_device(0)
+# cuda.close()
 
 #%%
+
+# define a 3d Unet with 3 downsampling steps and depthwise separable convolutions
 
 def NORM(out_f,normalization):
     normlayer = nn.ModuleDict([
@@ -47,7 +60,8 @@ class Conv3dsep(nn.Module):
         
         self.layer  = nn.Sequential(
             nn.Conv3d(in_f,  in_f, kernel_size=3,stride=stride,padding=padding,groups=in_f),
-            nn.Conv3d(in_f,  out_f,kernel_size=1,stride=1,padding='same'))
+            nn.Conv3d(in_f,  out_f,kernel_size=1,stride=1))
+        # self.layer = nn.Conv3d(in_f,out_f,kernel_size=3, stride=stride, padding=padding)
     
     def forward(self, x):
         return (self.layer(x))
@@ -163,7 +177,10 @@ class unet(nn.Module):
         
         return([img_out,unc_out])
       
-    
+#%%
+
+# define the DiceLoss Function
+
 class DiceLoss(nn.Module):
     def __init__(self, weight=None, size_average=True):
         super(DiceLoss, self).__init__()
@@ -184,9 +201,24 @@ class DiceLoss(nn.Module):
 #%%
 
 
-data_path = 'data/%s'%task
 
-class MedDataset(Dataset):
+
+class MedicalDataset(Dataset):
+    
+    """
+    define a dataset class 
+    -this class reads a clean sample from the provided data,
+    -uses average pooling to resize the scan to [64,64,64]
+    -generates a random volumetric mask, where the connected components of the mask
+     consist of either elliptical or cuboid objects
+    -considering the random masks, different perturbations are added to the medical
+     input data:
+         -setting area to random intensity
+         -adding impulsive perturbations to the area
+         -tbc
+     the type of perturbation is chosen uniformly at random
+    """
+    
     def __init__(
             self,
             datatype: str = 'train',
@@ -194,7 +226,7 @@ class MedDataset(Dataset):
             img_ids: np.array = None,
             disturb_input = True
         ):
-            # self.df = df
+        #######################################################################
             if datatype == 'train':
                 self.img_folder  = f"{path}/%s_train"%task
             else:
@@ -202,18 +234,104 @@ class MedDataset(Dataset):
             self.img_ids = img_ids
             self.disturb_input = disturb_input
             
+         ######################################################################   
+            def generate_random_mask(
+                    dim: int=64, 
+                    prop: float=np.random.uniform(0,.05),
+                    diameter: float=.25,
+                    shape: str='elliptical'):
+                
+                """
+                dim: defines the spatial dimension of the mask
+                prop: specifies the relative amount of voxels occupied by the mask objects
+                diameter: defines the maximal diameter of a connected component relative
+                            to the mask dimension
+                """
+                
+                f = np.zeros([dim, dim, dim])
+                a = dim*diameter
+                x = np.linspace(-dim/2, dim/2-1, dim)
+                X,Y,Z = np.meshgrid(x,x,x)
+                
+                if shape=='elliptical':
+                    while True:
+                        aa = a*np.random.rand(1)
+                        bb = a*np.random.rand(1)
+                        cc = a*np.random.rand(1)
+                    
+                        X_shift = X - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
+                        Y_shift = Y - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
+                        Z_shift = Z - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
+                    
+                        idx = (X_shift**2/aa**2 + Y_shift**2/bb**2 + Z_shift**2/cc**2) <= 1
+                        # angle = np.random.randint(1, 90+1)
+                        # idx = ndimage.rotate(idx, angle, reshape = False)
+                        idx = np.rot90(idx,k=np.random.choice([1,2,3]))
+                        f[idx] = 1
+                        fflat = f.flatten()
+                        
+                        if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
+                            break
+                        
+                    return f.astype(np.uint8)
+            
+            self.generate_random_mask = generate_random_mask
+            
+            def random_intensity(data, rand_mask):
+                """
+                Set voxel values of data to the same random intensity wrt to 
+                the random mask
+                """
+                rand_int = np.random.choice(np.linspace(data.min(),data.max(),1000))
+                per_data = np.where(rand_mask!=1,data,rand_int)
+                return per_data
+            self.random_intensity = random_intensity
+            
+            def add_gaussian_noise(data, rand_mask, scale=.05):
+                """
+                Disturb the voxel values of data with Gaussian noise wrt to 
+                the random mask
+                """
+                noisy_sample = data + np.random.normal(loc=0, scale=scale,
+                                                       size=data.shape)
+                per_data = np.where(rand_mask!=1,data,noisy_sample)
+                return per_data
+            self.add_gaussian_noise = add_gaussian_noise
+
+            
     def __getitem__(self,idx):
+        
+        #generate the image path
         image_name = self.img_ids[idx]
         image_path = os.path.join(self.img_folder , image_name)
+        
+        #load the nifti file (affine matrix is omitted here)
         nifti = nib.load(image_path)
-        data = nifti.get_fdata().copy()[::2,::2,::2]
-        mask = define_random_mask(N=data.shape[0])
-        rand_int = np.random.choice(np.linspace(data.min(),data.max(),1000))
-        per_data = np.where(mask!=1,data,rand_int)
-        per_data = np.expand_dims(per_data,0)
-        per_data /= np.quantile(per_data,.98)
+        data = nifti.get_fdata().copy()
+        
+        #scale the data to [64,64,64]
+        fac = int(data.shape[0]/64)
+        data = block_reduce(data, (fac,fac,fac), np.mean)
+        
+        #define the random mask
+        rand_mask = self.generate_random_mask(dim=data.shape[0],
+                                    shape='elliptical')
+        # mask[data==0]=0 #according to challenge page no guarantee that perturbations are inside
+        
+        # devide the entire scan by its 98% quantile
+        data /= np.quantile(data,.98)
+        
+        type_of_per = np.random.choice(['rand_int','gauss_noise'])
+        if type_of_per == 'rand_int':
+            per_data = self.random_intensity(data,rand_mask)
+        elif type_of_per == 'gauss_noise':
+            per_data = self.add_gaussian_noise(data,rand_mask)
+        else:
+            print('Problem with data perturbations'); pass;
+        
+        
         if self.disturb_input:
-            return per_data, np.expand_dims(mask,0)
+            return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0)
         else:
             data = np.expand_dims(data,0)
             return data, data
@@ -221,17 +339,18 @@ class MedDataset(Dataset):
     def __len__(self):
         return(len(self.img_ids))
     
+    
 vali_ids = os.listdir(os.path.join(data_path,'%s_train'%task))[::6]
 train_ids = [f for f in os.listdir(os.path.join(data_path,'%s_train'%task)) if f not in vali_ids] 
 test_ids = os.listdir(os.path.join(data_path,'toy'))
 
-train_dataset = MedDataset(
+train_dataset = MedicalDataset(
     datatype = 'train',
     img_ids = train_ids)
-vali_dataset = MedDataset(
+vali_dataset = MedicalDataset(
     datatype = 'train',
     img_ids = vali_ids)
-test_dataset = MedDataset(
+test_dataset = MedicalDataset(
     datatype = 'test',
     img_ids = test_ids,
     disturb_input = False)
@@ -239,22 +358,24 @@ test_dataset = MedDataset(
 #%%
 
 criterion = DiceLoss()
-model = unet(n_channels =1, f_size=16)
+model = unet(n_channels =1, f_size=32)
 if train_on_gpu:
     model.cuda()
-# summary(model, (1,128,128,128))
-optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=5, cooldown=2)
+summary(model, (1,64,64,64))
+optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, cooldown=2)
 
 #%%
 
-batch_size = 2
+torch.cuda.empty_cache()
+gc.collect()
+batch_size = 3
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
     num_workers = 6)
 valid_loader = DataLoader(
-    vali_dataset, batch_size=batch_size, shuffle=True,
+    vali_dataset, batch_size=4, shuffle=True,
     num_workers = 6)
 test_loader = DataLoader(
     test_dataset, batch_size=1, shuffle=True,
@@ -300,9 +421,10 @@ for epoch in range(1, n_epochs+1):
     ######################    
     # validate the model #
     ######################
-    model.eval()
+    model.eval() #to tell layers you are in test mode (batchnorm, dropout,....)
     del data, target
-    with torch.no_grad():
+    save_data = 1
+    with torch.no_grad(): #deactivates the autograd engine
         bar = tq(valid_loader, postfix={"valid_loss":0.0})
         for data, target in bar:
             # move tensors to GPU if CUDA is available
@@ -317,13 +439,15 @@ for epoch in range(1, n_epochs+1):
             # dice_cof = dice_no_threshold(output.cpu(), target.cpu()).item()
             # dice_score +=  dice_cof * data.size(0)
             bar.set_postfix(ordered_dict={"valid_loss":loss.item()})
-    preds = output[0].cpu().detach().numpy()[:,0]
-    uncer = output[1].cpu().detach().numpy()[:,0]
-    gts   = target.cpu().detach().numpy()[:,0]
+            if save_data:
+                preds = output[0].cpu().detach().numpy()[:,0]
+                uncer = output[1].cpu().detach().numpy()[:,0]
+                gts   = target.cpu().detach().numpy()[:,0]
+                save_data = 0
+                
     
-    
-    fig, ax = plt.subplots(2,4,figsize=(12,5)); 
-    for j in [0,1]:
+    fig, ax = plt.subplots(4,4,figsize=(12,10)); 
+    for j in range(preds.shape[0]):
         im = ax[j,0].imshow(np.sum(gts[j],0), cmap='Greys_r')
         ax[j,0].axis('off')
         plt.colorbar(im,ax=ax[j,0])
@@ -365,7 +489,6 @@ for epoch in range(1, n_epochs+1):
     ######################    
     # test the model #
     ######################
-    model.eval()
     del data, target
     preds = []; gts = []; uncers=[]
     count = 0
@@ -381,8 +504,8 @@ for epoch in range(1, n_epochs+1):
     gts = np.concatenate(gts,0)
     uncers = np.concatenate(uncers,0)
 
-    fig, ax = plt.subplots(2,4,figsize=(12,5)); 
-    for j in [0,1]:
+    fig, ax = plt.subplots(4,4,figsize=(12,10)); 
+    for j in [0,1,2,3]:
         im = ax[j,0].imshow(np.sum(gts[j],0), cmap='Greys_r')
         ax[j,0].axis('off')
         plt.colorbar(im,ax=ax[j,0])
