@@ -31,6 +31,7 @@ from tqdm import tqdm as tq
 from scipy.ndimage import rotate
 import time
 from skimage.measure import block_reduce
+from helper_functions import generate_random_mask, add_gaussian_noise, random_intensity
 
 #%%
 
@@ -44,8 +45,10 @@ train_on_gpu = torch.cuda.is_available()
 # cuda.close()
 
 #%%
-
-# define a 3d Unet with 3 downsampling steps and depthwise separable convolutions
+"""
+define a 3d Unet with 3 downsampling steps, skip connection and depthwise 
+separable convolutions
+"""
 
 def NORM(out_f,normalization):
     normlayer = nn.ModuleDict([
@@ -235,69 +238,8 @@ class MedicalDataset(Dataset):
             self.disturb_input = disturb_input
             
          ######################################################################   
-            def generate_random_mask(
-                    dim: int=64, 
-                    prop: float=np.random.uniform(0,.05),
-                    diameter: float=.25,
-                    shape: str='elliptical'):
-                
-                """
-                dim: defines the spatial dimension of the mask
-                prop: specifies the relative amount of voxels occupied by the mask objects
-                diameter: defines the maximal diameter of a connected component relative
-                            to the mask dimension
-                """
-                
-                f = np.zeros([dim, dim, dim])
-                a = dim*diameter
-                x = np.linspace(-dim/2, dim/2-1, dim)
-                X,Y,Z = np.meshgrid(x,x,x)
-                
-                if shape=='elliptical':
-                    while True:
-                        aa = a*np.random.rand(1)
-                        bb = a*np.random.rand(1)
-                        cc = a*np.random.rand(1)
-                    
-                        X_shift = X - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
-                        Y_shift = Y - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
-                        Z_shift = Z - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
-                    
-                        idx = (X_shift**2/aa**2 + Y_shift**2/bb**2 + Z_shift**2/cc**2) <= 1
-                        # angle = np.random.randint(1, 90+1)
-                        # idx = ndimage.rotate(idx, angle, reshape = False)
-                        idx = np.rot90(idx,k=np.random.choice([1,2,3]))
-                        f[idx] = 1
-                        fflat = f.flatten()
-                        
-                        if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
-                            break
-                        
-                    return f.astype(np.uint8)
             
-            self.generate_random_mask = generate_random_mask
             
-            def random_intensity(data, rand_mask):
-                """
-                Set voxel values of data to the same random intensity wrt to 
-                the random mask
-                """
-                rand_int = np.random.choice(np.linspace(data.min(),data.max(),1000))
-                per_data = np.where(rand_mask!=1,data,rand_int)
-                return per_data
-            self.random_intensity = random_intensity
-            
-            def add_gaussian_noise(data, rand_mask, scale=.05):
-                """
-                Disturb the voxel values of data with Gaussian noise wrt to 
-                the random mask
-                """
-                noisy_sample = data + np.random.normal(loc=0, scale=scale,
-                                                       size=data.shape)
-                per_data = np.where(rand_mask!=1,data,noisy_sample)
-                return per_data
-            self.add_gaussian_noise = add_gaussian_noise
-
             
     def __getitem__(self,idx):
         
@@ -314,22 +256,26 @@ class MedicalDataset(Dataset):
         data = block_reduce(data, (fac,fac,fac), np.mean)
         
         #define the random mask
-        rand_mask = self.generate_random_mask(dim=data.shape[0],
-                                    shape='elliptical')
-        # mask[data==0]=0 #according to challenge page no guarantee that perturbations are inside
+        shape = np.random.choice(['cuboid','elliptical'])
+        rand_mask = generate_random_mask(dim=data.shape[0],
+                                    shape=shape)
+        # mask[data==0]=0 
+        #according to challenge page no guarantee that components lie within the
+        # investigated object
         
         # devide the entire scan by its 98% quantile
         data /= np.quantile(data,.98)
         
         type_of_per = np.random.choice(['rand_int','gauss_noise'])
         if type_of_per == 'rand_int':
-            per_data = self.random_intensity(data,rand_mask)
+            per_data = random_intensity(data,rand_mask)
         elif type_of_per == 'gauss_noise':
-            per_data = self.add_gaussian_noise(data,rand_mask)
+            per_data = add_gaussian_noise(data,rand_mask)
         else:
             print('Problem with data perturbations'); pass;
         
-        
+        #when evaluating on provided toy data, no perturbations are needed for 
+        #the input instances, i.e. disturb_input equals FALSE during test
         if self.disturb_input:
             return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0)
         else:
@@ -362,14 +308,14 @@ model = unet(n_channels =1, f_size=32)
 if train_on_gpu:
     model.cuda()
 summary(model, (1,64,64,64))
-optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
+optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, cooldown=2)
 
 #%%
 
 torch.cuda.empty_cache()
 gc.collect()
-batch_size = 3
+batch_size = 2
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
