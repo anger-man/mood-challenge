@@ -31,6 +31,7 @@ from tqdm import tqdm as tq
 from scipy.ndimage import rotate
 import time
 from skimage.measure import block_reduce
+from datetime import datetime
 from helper_functions import generate_random_mask, add_gaussian_noise, random_intensity
 
 #%%
@@ -310,12 +311,14 @@ if train_on_gpu:
 summary(model, (1,64,64,64))
 optimizer = torch.optim.Adam(model.parameters(), lr=1e-4)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, cooldown=2)
+dt = datetime.now()
+index = '%d%d%d_%d%d'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 
 #%%
 
 torch.cuda.empty_cache()
 gc.collect()
-batch_size = 2
+batch_size = 4
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
@@ -408,7 +411,7 @@ for epoch in range(1, n_epochs+1):
         plt.colorbar(im,ax=ax[j,3])
         
     fig.tight_layout(pad=.1)
-    plt.savefig('plots/val/%d.pdf'%time.time())
+    plt.savefig('plots/val/%s_ep%d.pdf'%(index,epoch))
         
     # calculate average losses
     train_loss = train_loss/len(train_loader.dataset)
@@ -427,7 +430,7 @@ for epoch in range(1, n_epochs+1):
         print('Validation loss decreased ({:.6f} --> {:.6f}).  Saving model ...'.format(
         valid_loss_min,
         valid_loss))
-        torch.save(model.state_dict(), 'model_cifar.pt')
+        torch.save(model.state_dict(), 'model_%s.pt'%index)
         valid_loss_min = valid_loss
     
     scheduler.step(valid_loss)
@@ -466,7 +469,7 @@ for epoch in range(1, n_epochs+1):
         plt.colorbar(im,ax=ax[j,3])
         
     fig.tight_layout(pad=.1)
-    plt.savefig('plots/test/%d.pdf'%time.time())
+    plt.savefig('plots/test/%s_ep%d.pdf'%(index,epoch))
 
 #%%
 
@@ -486,48 +489,48 @@ ax.plot([i[0] for i in lr_rate_list])
 plt.ylabel('learing rate during training', fontsize=22)
 
 ax = fig.add_subplot(122)
-ax.plot(train_loss_list,  marker='o', label="Training Loss")
-ax.plot(valid_loss_list,  marker='o', label="Validation Loss")
+ax.plot(train_loss_list,  marker='x', label="Training Loss")
+ax.plot(valid_loss_list,  marker='x', label="Validation Loss")
 plt.ylabel('loss', fontsize=22)
 plt.legend()
-plt.savefig('loss/%d'%time.time())
+plt.savefig('loss/%s.pdf'%index)
 
 
-preds = []; gts = []; uncers=[]
-count = 0
-for data, target in tq(test_loader):
-    if train_on_gpu:
-        data = data.cuda()
-    target = target.cpu().detach().numpy()
-    pred,uncer = model(data)
-    pred = pred.cpu().detach().numpy()
-    uncer = uncer.cpu().detach().numpy()
-    preds.append(pred[0]); gts.append(target[0]); uncers.append(uncer[0])
-preds = np.concatenate(preds,0)
-gts = np.concatenate(gts,0)
-uncers = np.concatenate(uncers,0)
+# preds = []; gts = []; uncers=[]
+# count = 0
+# for data, target in tq(test_loader):
+#     if train_on_gpu:
+#         data = data.cuda()
+#     target = target.cpu().detach().numpy()
+#     pred,uncer = model(data)
+#     pred = pred.cpu().detach().numpy()
+#     uncer = uncer.cpu().detach().numpy()
+#     preds.append(pred[0]); gts.append(target[0]); uncers.append(uncer[0])
+# preds = np.concatenate(preds,0)
+# gts = np.concatenate(gts,0)
+# uncers = np.concatenate(uncers,0)
 
-fig, ax = plt.subplots(4,4,figsize=(12,10)); 
-for j in [0,1,2,3]:
+# fig, ax = plt.subplots(4,4,figsize=(12,10)); 
+# for j in [0,1,2,3]:
     
-    im = ax[j,0].imshow(gts[j,0], cmap='Greys_r')
-    ax[j,0].axis('off')
-    plt.colorbar(im,ax=ax[j,0])
+#     im = ax[j,0].imshow(gts[j,0], cmap='Greys_r')
+#     ax[j,0].axis('off')
+#     plt.colorbar(im,ax=ax[j,0])
     
-    im = ax[j,1].imshow(preds[j,0], cmap='Greys_r')
-    ax[j,1].axis('off')
-    plt.colorbar(im,ax=ax[j,1])
+#     im = ax[j,1].imshow(preds[j,0], cmap='Greys_r')
+#     ax[j,1].axis('off')
+#     plt.colorbar(im,ax=ax[j,1])
     
-    im = ax[j,2].imshow(np.abs(gts[j,0]-preds[j,0]), cmap='gist_rainbow')
-    ax[j,2].axis('off')
-    plt.colorbar(im,ax=ax[j,2])
+#     im = ax[j,2].imshow(np.abs(gts[j,0]-preds[j,0]), cmap='gist_rainbow')
+#     ax[j,2].axis('off')
+#     plt.colorbar(im,ax=ax[j,2])
     
-    im = ax[j,3].imshow(uncers[j,0], cmap='gist_rainbow')
-    ax[j,3].axis('off')
-    plt.colorbar(im,ax=ax[j,3])
+#     im = ax[j,3].imshow(uncers[j,0], cmap='gist_rainbow')
+#     ax[j,3].axis('off')
+#     plt.colorbar(im,ax=ax[j,3])
     
-fig.tight_layout(pad=.1)
-plt.savefig('plots/%d'%time.time())
+# fig.tight_layout(pad=.1)
+# plt.savefig('plots/%s.pdf'%index)
 
 
 
