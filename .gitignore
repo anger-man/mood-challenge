@@ -1,6 +1,6 @@
 #my exception
 *.nii.g*
-*.pt
+
 
 # Byte-compiled / optimized / DLL files
 __pycache__/
