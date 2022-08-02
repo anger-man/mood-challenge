@@ -136,9 +136,9 @@ def generate_random_mask(
                 break
             
         elif shape=='cuboid':
-            aa = int(.5*a*np.random.rand(1))
-            bb = int(.5*a*np.random.rand(1))
-            cc = int(.5*a*np.random.rand(1))
+            aa = int(.7*a*np.random.rand(1))
+            bb = int(.7*a*np.random.rand(1))
+            cc = int(.7*a*np.random.rand(1))
         
             x_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
             y_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))

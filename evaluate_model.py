@@ -86,9 +86,9 @@ test_loader = DataLoader(
 
 
         
-######################    
-# validate the model #
-######################
+################################################
+# validate the model on data with random masks #
+################################################
 model.eval() #to tell layers you are in test mode (batchnorm, dropout,....)
 valid_loss = 0.0; save_data = 0
 with torch.no_grad(): #deactivates the autograd engine
@@ -121,12 +121,44 @@ print('Validation Dice: %.3f'%(valid_loss/len(valid_loader.dataset)))
 
 os.mkdir(os.path.join('testing',index))
 for ns in range(preds.shape[0]):
-    nif_pred = nib.Nifti1Image(preds[ns],affine=afm[ns])
+    nif_pred = nib.Nifti1Image(np.round(preds[ns]),affine=afm[ns])
     nib.save(nif_pred, os.path.join('testing',index,'%d_pred.nii.gz'%ns))
     nif_inp = nib.Nifti1Image(inp[ns],affine=afm[ns])
     nib.save(nif_inp, os.path.join('testing',index,'%d_inp.nii.gz'%ns))
     nif_tar = nib.Nifti1Image(tar[ns],affine=afm[ns])
     nib.save(nif_tar, os.path.join('testing',index,'%d_tar.nii.gz'%ns))
+    
+
+################################################
+# validate the model on the challenge toy data
+################################################
+save_data = 0
+with torch.no_grad(): #deactivates the autograd engine
+    bar = tq(test_loader)
+    for data, target,aff_mat in bar:
+        # move tensors to GPU if CUDA is available
+        if train_on_gpu:
+            data, target = data.cuda(), target.cuda()
+        # forward pass: compute predicted outputs by passing inputs to the model
+        output = model(data)
+        
+        if save_data==0:
+            inp   = data.cpu().detach().numpy()[:,0]
+            preds = output[0].cpu().detach().numpy()[:,0]
+            uncer = output[1].cpu().detach().numpy()[:,0]
+            tar   = target.cpu().detach().numpy()[:,0]
+            afm   = aff_mat.cpu().detach().numpy()
+            save_data=-1
+            
+# save predictions as nifti
+os.mkdir(os.path.join('testing',index,'toy'))
+for ns in range(preds.shape[0]):
+    nif_pred = nib.Nifti1Image(np.round(preds[ns]),affine=afm[ns])
+    nib.save(nif_pred, os.path.join('testing',index,'toy','%d_pred.nii.gz'%ns))
+    nif_inp = nib.Nifti1Image(inp[ns],affine=afm[ns])
+    nib.save(nif_inp, os.path.join('testing',index,'toy','%d_inp.nii.gz'%ns))
+
+    
     
     
 
