@@ -242,9 +242,6 @@ class MedicalDataset(Dataset):
         #according to challenge page no guarantee that components lie within the
         # investigated object
         
-        # devide the entire scan by its 98% quantile
-        data /= np.quantile(data,.98)
-        
         type_of_per = np.random.choice(['rand_int','gauss_noise','shift_int',
                                         'scale_int','sobel'])
         if type_of_per == 'rand_int':
@@ -265,7 +262,7 @@ class MedicalDataset(Dataset):
         #when evaluating on provided toy data, no perturbations are needed for 
         #the input instances, i.e. disturb_input is set to FALSE during testing
         if self.disturb_input:
-            
+            per_data /= np.quantile(per_data,.98)
             #scale the data to [64,64,64]
             if self.reduce_dim:
                 fac = int(per_data.shape[0]/64)
@@ -278,15 +275,15 @@ class MedicalDataset(Dataset):
                 return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0)
                 
         else:
+            data /= np.quantile(data,.98)
             if self.reduce_dim:
                 fac = int(data.shape[0]/64)
-                data = block_reduce(data, (fac,fac,fac), np.mean)    
+                data = block_reduce(data, (fac,fac,fac), np.mean)   
                 
+            data = np.expand_dims(data,0)
             if self.affine_matrix:
-                data = np.expand_dims(data,0)
                 return data, data, aff_mat
             else:
-                data = np.expand_dims(data,0)
                 return data, data
 
     def __len__(self):
