@@ -87,6 +87,17 @@ def shift_intensity(data, rand_mask):
 
 ###############################################################################
 
+def scale_intensity(data, rand_mask):
+    """
+    double or half the intensity of voxel values wrt to the random mask
+    """
+    scale = np.random.choice([.5,2.])
+    scaled = scale*data
+    per_data = np.where(rand_mask!=1,data,scaled)
+    return per_data
+
+###############################################################################
+
 def apply_sobel_filter(data, rand_mask):
     """
     Apply the sobel filter to the regions indicated by  
@@ -107,19 +118,21 @@ def generate_random_mask(
     """
     dim: defines the spatial dimension of the mask
     propval: specifies the maximum relative amount of voxels occupied by the mask objects
-    diameter: defines the maximal diameter of a connected component relative
-                to the mask dimension
+    shapes: list of available shapes; default: ['elliptical','cuboid']
+    shape_prop: list defining the likelihood of each shape, sum should equal 1
     """
+    
+    #define the maximal diameter of a connected component relative to the mask dimension
+    diameter = 48/dim
+    a = dim*diameter
 
     prop=np.random.uniform(0,propval),
     f = np.zeros([dim, dim, dim])
-    diameter = 48/dim
-    a = dim*diameter
     x = np.linspace(-dim/2, dim/2-1, dim)
     X,Y,Z = np.meshgrid(x,x,x)
     
     generate_components = np.random.rand()
-    if generate_components>.2:
+    if generate_components>.1:
         
         for dummy in range(4):
             
@@ -130,17 +143,15 @@ def generate_random_mask(
                 shape = shapes[1]
                 
             if shape=='elliptical':
-                aa = a*np.random.rand(1)
-                bb = a*np.random.rand(1)
-                cc = a*np.random.rand(1)
+                aa = a*np.random.uniform(.1,1)
+                bb = a*np.random.uniform(.1,1)
+                cc = a*np.random.uniform(.1,1)
             
                 X_shift = X - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
                 Y_shift = Y - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
                 Z_shift = Z - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
             
                 idx = (X_shift**2/aa**2 + Y_shift**2/bb**2 + Z_shift**2/cc**2) <= 1
-                # angle = np.random.randint(1, 90+1)
-                # idx = ndimage.rotate(idx, angle, reshape = False)
                 idx = np.rot90(idx,k=np.random.choice([1,2,3]))
                 f[idx] = 1
                 fflat = f.flatten()
@@ -149,9 +160,9 @@ def generate_random_mask(
                     break
                 
             elif shape=='cuboid':
-                aa = int(.5*a*np.random.rand(1))
-                bb = int(.5*a*np.random.rand(1))
-                cc = int(.5*a*np.random.rand(1))
+                aa = int(.5*a*np.random.uniform(.1,1))
+                bb = int(.5*a*np.random.uniform(.1,1))
+                cc = int(.5*a*np.random.uniform(.1,1))
             
                 x_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
                 y_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
@@ -166,6 +177,7 @@ def generate_random_mask(
             else:
                 print('No valid shape'); pass;
                 
+    
     return f.astype(np.uint8)
         
 #%%
@@ -220,7 +232,7 @@ class MedicalDataset(Dataset):
         
         #load the nifti file (affine matrix is omitted here)
         nifti = nib.load(image_path)
-        data = nifti.get_fdata()#[::2,::2,::2]
+        data = nifti.get_fdata()[::2,::2,::2]
         aff_mat = nifti.affine
         
         #define the random mask
@@ -233,7 +245,8 @@ class MedicalDataset(Dataset):
         # devide the entire scan by its 98% quantile
         data /= np.quantile(data,.98)
         
-        type_of_per = np.random.choice(['rand_int','gauss_noise','shift_int','sobel'])
+        type_of_per = np.random.choice(['rand_int','gauss_noise','shift_int',
+                                        'scale_int','sobel'])
         if type_of_per == 'rand_int':
             per_data = random_intensity(data,rand_mask)
         elif type_of_per == 'gauss_noise':
@@ -243,6 +256,9 @@ class MedicalDataset(Dataset):
             per_data = apply_sobel_filter(data,rand_mask)
         elif type_of_per == 'shift_int':
             per_data = shift_intensity(data,rand_mask)
+        elif type_of_per == 'scale_int':
+            rand_mask[data==0] = 0
+            per_data = scale_intensity(data,rand_mask)
         else:
             print('Problem with data perturbations'); pass;
         
@@ -254,7 +270,7 @@ class MedicalDataset(Dataset):
             if self.reduce_dim:
                 fac = int(per_data.shape[0]/64)
                 per_data = block_reduce(per_data, (fac,fac,fac), np.mean)
-                rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.median).round()
+                rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.max)
                 
             if self.affine_matrix:
                 return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0),aff_mat
