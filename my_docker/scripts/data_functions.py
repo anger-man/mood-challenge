@@ -151,7 +151,7 @@ def generate_random_mask(
     X,Y,Z = np.meshgrid(x,x,x)
     
     generate_components = np.random.rand()
-    if generate_components>.2:
+    if generate_components>0:
         
         for dummy in range(4):
             
@@ -233,7 +233,7 @@ class MedicalDataset(Dataset):
             if datatype == 'train':
                 self.img_folder  = f"{path}/%s_train"%task
             else:
-                self.img_folder  = f"{path}/toy"
+                self.img_folder  = f"{path}"
             self.img_ids = img_ids
             self.reduce_dim = reduce_dim
             self.disturb_input = disturb_input
