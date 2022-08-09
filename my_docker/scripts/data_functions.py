@@ -151,7 +151,7 @@ def generate_random_mask(
     X,Y,Z = np.meshgrid(x,x,x)
     
     generate_components = np.random.rand()
-    if generate_components>0:
+    if generate_components>.2:
         
         for dummy in range(4):
             
