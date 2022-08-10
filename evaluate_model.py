@@ -75,7 +75,7 @@ dt = datetime.now()
 index = '%d%d%d_%d%d'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 
 valid_loader = DataLoader(
-    vali_dataset, batch_size=1, shuffle=True,
+    vali_dataset, batch_size=4, shuffle=True,
     num_workers = 6)
 test_loader = DataLoader(
     test_dataset, batch_size=1, shuffle=False,

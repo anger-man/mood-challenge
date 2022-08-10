@@ -23,7 +23,7 @@ from scipy.ndimage import rotate
 import time
 from skimage.measure import block_reduce
 from skimage.filters import sobel
-
+from models import unet
 
     
 #%%
@@ -125,6 +125,31 @@ def apply_sobel_filter(data, rand_mask):
     sobel_data = sobel(data)
     per_data = np.where(rand_mask!=1,data,sobel_data)
     return per_data
+
+###############################################################################
+
+per_model = unet(n_channels = 1, f_size=4)
+per_model.eval()
+
+
+def weight_reset(m):
+    if isinstance(m, nn.Conv3d):
+        m.reset_parameters()
+
+def random_convolution(data, rand_mask, per_model = per_model):
+    """
+    Select a region wrt to the random mask and propagate it through a vanilla
+    Unet with random initialization
+    """
+    per_model.apply(weight_reset)
+    m = np.mean(data[data!=0]); sd = np.std(data[data!=0])
+    foo = np.expand_dims(np.expand_dims(data,0),0)
+    foo = per_model(torch.from_numpy(foo))
+    foo = foo[0].cpu().detach().numpy()[0,0]
+    foo = np.clip((foo-np.mean(foo[data!=0]))/np.std(foo[data!=0]) * sd + m,0,1e7)
+    per_data = np.where(rand_mask!=1,data,foo)
+    return per_data
+
 
 #%%
 
@@ -262,19 +287,23 @@ class MedicalDataset(Dataset):
         # investigated object
         
         type_of_per = np.random.choice(['rand_int','gauss_noise','shift_int',
-                                        'scale_int','sobel'])
+                                        'scale_int','sobel','rand_conv'])
+        
         if type_of_per == 'rand_int':
             per_data = random_intensity(data,rand_mask)
         elif type_of_per == 'gauss_noise':
             per_data = add_gaussian_noise(data,rand_mask)
-        elif type_of_per == 'sobel':
-            rand_mask[data==0] = 0
-            per_data = apply_sobel_filter(data,rand_mask)
         elif type_of_per == 'shift_int':
             per_data = shift_intensity(data,rand_mask)
+        elif type_of_per == 'rand_conv':
+            rand_mask[data==0] = 0
+            per_data = random_convolution(data,rand_mask)
         elif type_of_per == 'scale_int':
             rand_mask[data==0] = 0
             per_data = scale_intensity(data,rand_mask)
+        elif type_of_per == 'sobel':
+            rand_mask[data==0] = 0
+            per_data = apply_sobel_filter(data,rand_mask)
         else:
             print('Problem with data perturbations'); pass;
         
