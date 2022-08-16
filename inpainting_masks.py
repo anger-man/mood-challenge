@@ -144,8 +144,8 @@ plt.show()
 ##
 
 
-
-## Random ellipses
+# %%
+# Random ellipses
 N = 256
 f = np.zeros([N, N, N])
 
