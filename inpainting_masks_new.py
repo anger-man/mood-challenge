@@ -12,56 +12,42 @@ import random
 from scipy.spatial import ConvexHull
 from scipy.interpolate import interp1d
 import alphashape
+import os
 
 # %%
 def get_points(N, dist, max_points):
-    pointlist = []
-    point0x = np.random.rand()
-    point0y = np.random.rand()
-    point0z = np.random.rand()
-    pointlist.append([point0x, point0y, point0z])
+    points = []
+    x0 = np.random.rand()
+    y0 = np.random.rand()
+    z0 = np.random.rand()
+    points.append([x0, y0, z0])
     while True:
-        pointx = np.random.rand()
-        pointy = np.random.rand()
-        pointz = np.random.rand()
-        if np.sqrt((point0x-pointx)**2 + (point0y-pointy)**2 + (point0z-pointz)**2) <= dist:
-            pointlist.append([pointx, pointy, pointz])
-            if len(pointlist) == max_points:
+        x = np.random.rand()
+        y = np.random.rand()
+        z = np.random.rand()
+        if np.sqrt((x0-x)**2 + (y0-y)**2 + (z0-z)**2) <= dist:
+            points.append([x, y, z])
+            if len(points) == max_points:
                 break
-    return pointlist
+    return points 
 
 
 def create_masks(N, grid, max_points, dist, it):
 
-    x = np.linspace(0, 1, N)
-    X,Y,Z = np.meshgrid(x,x,x)
+    #x = np.linspace(0, 1, N)
+    #X,Y,Z = np.meshgrid(x,x,x)
 
-    points = get_points(N, dist, max_points)
+    points = get_points(N, dist, max_points)    
 
-    alpha_shape = alphashape.alphashape(points, 2.0)
+    #alpha = 0.95*alphashape.optimizealpha(points)
+    alpha = 30
+    alpha_shape = alphashape.alphashape(points, alpha)
 
     mask = np.zeros([N*N*N])
-    start = time.time()
-    #idd = 0
-    #for k in np.array([X.flatten(), Y.flatten(), Z.flatten()]).T:
-    #    tmp_point = [(k[0],k[1],k[2])]
-    #    if alpha_shape.contains(tmp_point):
-    #        #xid.append(m)
-    #        #yid.append(n)
-    #        #zid.append(l)
-    #    #if contained([m, n, l]):
-    #        mask[idd] = 1
-    #        idd += 1
-    #    print('Completed ' + str(round(steps/total*100)) + '%')
-    #    steps += 1
-    #mask = mask.reshape([N, N, N])
     indices = alpha_shape.contains(grid)
     if sum(indices) == 0:
         create_masks(N, grid, max_points, dist, it)
         return
-
-    end = time.time()
-    print(end - start)
 
     mask[indices] = 1
     mask = mask.reshape([N, N, N])
@@ -87,8 +73,8 @@ def create_masks(N, grid, max_points, dist, it):
     #return mask
 
 N = 256
-max_points = 40
-num_masks = 10
+max_points = 250
+num_masks = 500
 
 max_size = 0.15
 min_size = 0.05
@@ -99,5 +85,8 @@ grid = [tuple(x) for x in np.array([X.flatten(), Y.flatten(), Z.flatten()]).T]
 for it in range(num_masks):
     distrand = np.random.rand()
     dist = distrand*(max_size-min_size) + min_size
+    start = time.time()
     mask = create_masks(N, grid, max_points, dist, it)
+    end = time.time()
+    print(end - start)
     print(str(it) + '/' + str(num_masks))
