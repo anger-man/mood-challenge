@@ -35,6 +35,7 @@ from datetime import datetime
 from data_functions import generate_random_mask, add_gaussian_noise, random_intensity
 from data_functions import DiceLoss, MedicalDataset
 from models import unet
+import time
 
 #%%
 
@@ -79,7 +80,7 @@ test_dataset = MedicalDataset(
 #%%
 
 #the considered loss function is the DiceLoss
-criterion = DiceLoss()
+criterion = DiceLoss(evaluation_mode = False)
 
 #the output channel size of the first convolution equals 32
 model = unet(n_channels =1, f_size=32)
@@ -90,11 +91,11 @@ if train_on_gpu:
 summary(model, (1,64,64,64))
 #we use Adam algorithm, the lr is already fine-tuned
 optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, cooldown=2)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.25, patience=5, cooldown=3)
 
 #define a index for the plots and saved model parameters
 dt = datetime.now()
-index = '%d%d%d_%d%d'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
+index = '%d%d%d_%d%d_global'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 
 #%%
 
@@ -109,7 +110,7 @@ train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
     num_workers = 6)
 valid_loader = DataLoader(
-    vali_dataset, batch_size=4, shuffle=True,
+    vali_dataset, batch_size=batch_size, shuffle=True,
     num_workers = 6)
 test_loader = DataLoader(
     test_dataset, batch_size=1, shuffle=True,
@@ -142,7 +143,7 @@ for epoch in range(1, n_epochs+1):
         # forward pass: compute predicted outputs by passing inputs to the model
         output = model(data)
         # calculate the batch loss
-        loss = criterion(output, target)
+        loss = criterion(output[0], target)
         # backward pass: compute gradient of the loss with respect to model parameters
         loss.mean().backward()
         # perform a single optimization step (parameter update)
@@ -167,7 +168,7 @@ for epoch in range(1, n_epochs+1):
             # forward pass: compute predicted outputs by passing inputs to the model
             output = model(data)
             # calculate the batch loss
-            loss = criterion(output, target)
+            loss = criterion(output[0], target)
             # update average validation loss 
             valid_loss += loss.item()*data.size(0)
             # dice_cof = dice_no_threshold(output.cpu(), target.cpu()).item()

@@ -11,7 +11,6 @@ Created on Mon Aug  1 15:53:13 2022
 #load packages
 
 import torch
-torch.cuda.get_device_name(0)
 import torchvision
 import torch.nn as nn
 from torchsummary import summary
@@ -42,10 +41,10 @@ class Conv3dsep(nn.Module):
     def __init__(self, in_f, out_f, stride, padding):
         super(Conv3dsep,self).__init__()
         
-        self.layer  = nn.Sequential(
-            nn.Conv3d(in_f,  in_f, kernel_size=3,stride=stride,padding=padding,groups=in_f),
-            nn.Conv3d(in_f,  out_f,kernel_size=1,stride=1))
-        # self.layer = nn.Conv3d(in_f,out_f,kernel_size=3, stride=stride, padding=padding)
+        # self.layer  = nn.Sequential(
+        #     nn.Conv3d(in_f,  in_f, kernel_size=3,stride=stride,padding=padding,groups=in_f),
+        #     nn.Conv3d(in_f,  out_f,kernel_size=1,stride=1))
+        self.layer = nn.Conv3d(in_f,out_f,kernel_size=3, stride=stride, padding=padding)
     
     def forward(self, x):
         return (self.layer(x))

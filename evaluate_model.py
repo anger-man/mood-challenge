@@ -18,7 +18,6 @@ data_path = 'data/%s'%task
 #load packages
 
 import torch
-torch.cuda.get_device_name(0)
 import torchvision
 import torch.nn as nn
 from torchsummary import summary
@@ -33,13 +32,11 @@ import time
 from skimage.measure import block_reduce
 from datetime import datetime
 from data_functions import generate_random_mask, add_gaussian_noise, random_intensity
-from data_functions import DiceLoss, MedicalDataset
+from data_functions import DiceLoss, MedicalDataset, BCE
 from models import unet
 
 #%%
 
-torch.cuda.empty_cache()
-gc.collect()
 train_on_gpu = torch.cuda.is_available()
 
 #%%
@@ -67,7 +64,7 @@ test_dataset = MedicalDataset(
 
 #evaluate the global model for downsampled version of spatial size 64x64x64 
 
-criterion = DiceLoss()
+criterion = DiceLoss(evaluation_mode = True)
 model = unet(n_channels = 1, f_size=32)
 if train_on_gpu:
     model.cuda()
@@ -81,16 +78,17 @@ valid_loader = DataLoader(
     vali_dataset, batch_size=4, shuffle=True,
     num_workers = 6)
 test_loader = DataLoader(
-    test_dataset, batch_size=4, shuffle=True,
+    test_dataset, batch_size=1, shuffle=False,
     num_workers = 6)
 
 
         
-######################    
-# validate the model #
-######################
+################################################
+# validate the model on data with random masks #
+################################################
 model.eval() #to tell layers you are in test mode (batchnorm, dropout,....)
-valid_loss = 0.0; save_data = 0
+valid_loss = 0.0; save_data = 0; count=0
+os.mkdir(os.path.join('testing',index))
 with torch.no_grad(): #deactivates the autograd engine
     bar = tq(valid_loader, postfix={"valid_loss":0.0})
     for data, target,aff_mat in bar:
@@ -100,13 +98,51 @@ with torch.no_grad(): #deactivates the autograd engine
         # forward pass: compute predicted outputs by passing inputs to the model
         output = model(data)
         # calculate the batch loss
-        loss = criterion(output, target)
+        loss = criterion(output[0], target)
         # update average validation loss 
-        valid_loss += loss.item()*data.size(0)
+        valid_loss += loss.item()*target.size(0)
         # dice_cof = dice_no_threshold(output.cpu(), target.cpu()).item()
         # dice_score +=  dice_cof * data.size(0)
         bar.set_postfix(ordered_dict={"valid_loss":loss.item()})
         
+        if save_data>-10:
+            inp   = data.cpu().detach().numpy()[:,0]
+            preds = output[0].cpu().detach().numpy()[:,0]
+            uncer = output[1].cpu().detach().numpy()[:,0]
+            tar   = target.cpu().detach().numpy()[:,0]
+            afm   = aff_mat.cpu().detach().numpy()
+            save_data=-1
+            
+            # save predictions as nifti
+            for ns in range(preds.shape[0]):
+                nif_pred = nib.Nifti1Image(np.round(preds[ns]),affine=afm[ns])
+                nib.save(nif_pred, os.path.join('testing',index,'%d_pred.nii.gz'%count))
+                nif_inp = nib.Nifti1Image(inp[ns],affine=afm[ns])
+                nib.save(nif_inp, os.path.join('testing',index,'%d_inp.nii.gz'%count))
+                nif_tar = nib.Nifti1Image(tar[ns],affine=afm[ns])
+                nib.save(nif_tar, os.path.join('testing',index,'%d_tar.nii.gz'%count))
+                count+=1
+            
+print('Validation Dice: %.3f'%(valid_loss/len(valid_loader.dataset)))
+            
+
+
+    
+#%%
+
+################################################
+# validate the model on the challenge toy data
+################################################
+save_data = 0
+with torch.no_grad(): #deactivates the autograd engine
+    bar = tq(test_loader)
+    for data, target,aff_mat in bar:
+        # move tensors to GPU if CUDA is available
+        if train_on_gpu:
+            data, target = data.cuda(), target.cuda()
+        # forward pass: compute predicted outputs by passing inputs to the model
+        output = model(data)
+
         if save_data==0:
             inp   = data.cpu().detach().numpy()[:,0]
             preds = output[0].cpu().detach().numpy()[:,0]
@@ -115,18 +151,15 @@ with torch.no_grad(): #deactivates the autograd engine
             afm   = aff_mat.cpu().detach().numpy()
             save_data=-1
             
-print('Validation Dice: %.3f'%(valid_loss/len(valid_loader.dataset)))
-            
 # save predictions as nifti
-
-os.mkdir(os.path.join('testing',index))
+os.mkdir(os.path.join('testing',index,'toy'))
 for ns in range(preds.shape[0]):
-    nif_pred = nib.Nifti1Image(preds[ns],affine=afm[ns])
-    nib.save(nif_pred, os.path.join('testing',index,'%d_pred.nii.gz'%ns))
+    nif_pred = nib.Nifti1Image(np.round(preds[ns]),affine=afm[ns])
+    nib.save(nif_pred, os.path.join('testing',index,'toy','%d_pred.nii.gz'%ns))
     nif_inp = nib.Nifti1Image(inp[ns],affine=afm[ns])
-    nib.save(nif_inp, os.path.join('testing',index,'%d_inp.nii.gz'%ns))
-    nif_tar = nib.Nifti1Image(tar[ns],affine=afm[ns])
-    nib.save(nif_tar, os.path.join('testing',index,'%d_tar.nii.gz'%ns))
+    nib.save(nif_inp, os.path.join('testing',index,'toy','%d_inp.nii.gz'%ns))
+
+    
     
     
 
