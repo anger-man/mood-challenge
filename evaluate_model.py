@@ -89,6 +89,8 @@ test_loader = DataLoader(
 model.eval() #to tell layers you are in test mode (batchnorm, dropout,....)
 valid_loss = 0.0; save_data = 0; count=0
 os.mkdir(os.path.join('testing',index))
+os.mkdir(os.path.join('testing',index,'final'))
+os.mkdir(os.path.join('testing',index,'final_label'))
 with torch.no_grad(): #deactivates the autograd engine
     bar = tq(valid_loader, postfix={"valid_loss":0.0})
     for data, target,aff_mat in bar:
@@ -118,9 +120,9 @@ with torch.no_grad(): #deactivates the autograd engine
                 nif_pred = nib.Nifti1Image(np.round(preds[ns]),affine=afm[ns])
                 nib.save(nif_pred, os.path.join('testing',index,'%d_pred.nii.gz'%count))
                 nif_inp = nib.Nifti1Image(inp[ns],affine=afm[ns])
-                nib.save(nif_inp, os.path.join('testing',index,'%d_inp.nii.gz'%count))
+                nib.save(nif_inp, os.path.join('testing',index,'final/%d.nii.gz'%count))
                 nif_tar = nib.Nifti1Image(tar[ns],affine=afm[ns])
-                nib.save(nif_tar, os.path.join('testing',index,'%d_tar.nii.gz'%count))
+                nib.save(nif_tar, os.path.join('testing',index,'final_label/%d.nii.gz'%count))
                 count+=1
             
 print('Validation Dice: %.3f'%(valid_loss/len(valid_loader.dataset)))

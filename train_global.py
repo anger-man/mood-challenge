@@ -117,7 +117,7 @@ test_loader = DataLoader(
     num_workers = 6)
 
 
-n_epochs = 80
+n_epochs = 50
 train_loss_list = []
 valid_loss_list = []
 dice_score_list =  []

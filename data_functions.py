@@ -86,7 +86,7 @@ def add_gaussian_noise(data, rand_mask):
     Disturb the voxel values of data with Gaussian noise wrt to 
     the random mask
     """
-    scale=np.random.uniform(.07,.14)
+    scale=np.random.uniform(.1,.2)
     noisy_sample = data + np.random.normal(loc=0, scale=scale,
                                            size=data.shape)
     per_data = np.where(rand_mask!=1,data,noisy_sample)
@@ -255,12 +255,16 @@ class MedicalDataset(Dataset):
         #######################################################################
             if datatype == 'train':
                 self.img_folder  = f"{path}/%s_train"%task
-            else:
+            elif datatype == 'test':
                 self.img_folder  = f"{path}/toy"
+            elif datatype == 'final':
+                self.img_folder  = f"{path}/final"
+                self.tar_folder = f"{path}/final_label"
             self.img_ids = img_ids
             self.reduce_dim = reduce_dim
             self.disturb_input = disturb_input
             self.affine_matrix = affine_matrix
+            self.datatype = datatype
             
          ######################################################################   
             
@@ -268,67 +272,82 @@ class MedicalDataset(Dataset):
             
     def __getitem__(self,idx):
         
-        #generate the image path
-        image_name = self.img_ids[idx]
-        image_path = os.path.join(self.img_folder , image_name)
+        if self.datatype == 'final':
+            image_name = self.img_ids[idx]
+            image_path = os.path.join(self.img_folder , image_name)
+            nifti = nib.load(image_path)
+            data = nifti.get_fdata()
+            aff_mat = nifti.affine
+            
+            target_path = os.path.join(self.tar_folder , image_name)
+            nifti = nib.load(target_path)
+            tar = nifti.get_fdata()
+            
+            return np.expand_dims(data,0),np.expand_dims(tar,0),aff_mat
         
-        #load the nifti file (affine matrix is omitted here)
-        nifti = nib.load(image_path)
-        data = nifti.get_fdata()#[::2,::2,::2]
-        aff_mat = nifti.affine
-        
-        #define the random mask
-        rand_mask = generate_random_mask(dim=data.shape[0],
-                                    shape_prop=[.5,.5])
-        # mask[data==0]=0 
-        #according to challenge page no guarantee that components lie within the
-        # investigated object
-        
-        type_of_per = np.random.choice(['rand_int','gauss_noise',
-                                        'scale_int','sobel','rand_conv'])
-        
-        if type_of_per == 'rand_int':
-            per_data = random_intensity(data,rand_mask)
-        elif type_of_per == 'gauss_noise':
-            per_data = add_gaussian_noise(data,rand_mask)
-        elif type_of_per == 'rand_conv':
-            rand_mask[data==0] = 0
-            per_data = random_convolution(data,rand_mask)
-        elif type_of_per == 'scale_int':
-            rand_mask[data==0] = 0
-            per_data = scale_intensity(data,rand_mask)
-        elif type_of_per == 'sobel':
-            rand_mask[data==0] = 0
-            per_data = apply_sobel_filter(data,rand_mask)
         else:
-            print('Problem with data perturbations'); pass;
-        
-        #when evaluating on provided toy data, no perturbations are needed for 
-        #the input instances, i.e. disturb_input is set to FALSE during testing
-        if self.disturb_input:
-            per_data /= np.quantile(per_data,.98)
-            #scale the data to [64,64,64]
-            if self.reduce_dim:
-                fac = int(per_data.shape[0]/64)
-                per_data = block_reduce(per_data, (fac,fac,fac), np.mean)
-                rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.max)
-                
-            if self.affine_matrix:
-                return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0),aff_mat
-            else:
-                return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0)
-                
-        else:
+            #generate the image path
+            image_name = self.img_ids[idx]
+            image_path = os.path.join(self.img_folder , image_name)
+            
+            
+            #load the nifti file (affine matrix is omitted here)
+            nifti = nib.load(image_path)
+            data = nifti.get_fdata()#[::2,::2,::2]
             data /= np.quantile(data,.98)
-            if self.reduce_dim:
-                fac = int(data.shape[0]/64)
-                data = block_reduce(data, (fac,fac,fac), np.mean)   
-                
-            data = np.expand_dims(data,0)
-            if self.affine_matrix:
-                return data, data, aff_mat
+            aff_mat = nifti.affine
+            
+            
+            #define the random mask
+            rand_mask = generate_random_mask(dim=data.shape[0],
+                                        shape_prop=[.5,.5])
+            # mask[data==0]=0 
+            #according to challenge page no guarantee that components lie within the
+            # investigated object
+            
+            type_of_per = np.random.choice(['rand_int','gauss_noise',
+                                            'scale_int','sobel','rand_conv'])
+            
+            if type_of_per == 'rand_int':
+                per_data = random_intensity(data,rand_mask)
+            elif type_of_per == 'gauss_noise':
+                per_data = add_gaussian_noise(data,rand_mask)
+            elif type_of_per == 'rand_conv':
+                rand_mask[data==0] = 0
+                per_data = random_convolution(data,rand_mask)
+            elif type_of_per == 'scale_int':
+                rand_mask[data==0] = 0
+                per_data = scale_intensity(data,rand_mask)
+            elif type_of_per == 'sobel':
+                rand_mask[data==0] = 0
+                per_data = apply_sobel_filter(data,rand_mask)
             else:
-                return data, data
+                print('Problem with data perturbations'); pass;
+            
+            #when evaluating on provided toy data, no perturbations are needed for 
+            #the input instances, i.e. disturb_input is set to FALSE during testing
+            if self.disturb_input:
+                #scale the data to [64,64,64]
+                if self.reduce_dim:
+                    fac = int(per_data.shape[0]/64)
+                    per_data = block_reduce(per_data, (fac,fac,fac), np.mean)
+                    rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.max)
+                    
+                if self.affine_matrix:
+                    return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0),aff_mat
+                else:
+                    return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0)
+                    
+            else:
+                if self.reduce_dim:
+                    fac = int(data.shape[0]/64)
+                    data = block_reduce(data, (fac,fac,fac), np.mean)   
+                    
+                data = np.expand_dims(data,0)
+                if self.affine_matrix:
+                    return data, data, aff_mat
+                else:
+                    return data, data
 
     def __len__(self):
         return(len(self.img_ids))

@@ -87,7 +87,7 @@ criterion = DiceLoss()
 
 
 #option to use the prediction of the global network as second channel.
-use_global = False
+use_global = True
 n_channels = 1
 if use_global:
     model_global = unet(n_channels=1, f_size=32)
@@ -95,6 +95,7 @@ if use_global:
     if train_on_gpu:
         model_global.cuda()
     model_global.load_state_dict(torch.load('weights/weights_%s_global.pt'%task))
+    model_global.eval()
     
     
     
@@ -105,7 +106,7 @@ model = unet(n_channels=n_channels, f_size=32)
 if train_on_gpu:
     model = model.to('cuda:0')
     #model.cuda()
-summary(model, (1,64,64,64))
+summary(model, (n_channels,64,64,64))
 #we use Adam algorithm, the lr is already fine-tuned
 optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, cooldown=2)
@@ -113,6 +114,22 @@ scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, pa
 #define a index for the plots and saved model parameters
 dt = datetime.now()
 index = '%d%d%d_%d%d_local'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
+
+def get_subject_globpred(data, target):
+    img = data.squeeze()
+    fac = int(img.shape[0]/64)
+    img = block_reduce(img, (fac, fac, fac), np.mean)
+    img = torch.from_numpy(img).unsqueeze(0).unsqueeze(0).cuda()
+    with torch.no_grad():
+        pred_global = model_global(img)[0]
+    up = nn.Upsample(scale_factor = fac)
+    pred_global_up = up(pred_global)
+    subject = tio.Subject({
+        'image': tio.ScalarImage(tensor = data),
+        'labels': tio.LabelMap(tensor = target),
+        'pred_global': tio.ScalarImage(tensor = pred_global_up.squeeze(0))
+        })
+    return subject
 
 #%%
 
@@ -122,6 +139,7 @@ index = '%d%d%d_%d%d_local'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 torch.cuda.empty_cache()
 gc.collect()
 batch_size = 4
+patch_bs = 1
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
 valid_loader = DataLoader(vali_dataset, batch_size=4, shuffle=True, num_workers=6)
@@ -134,7 +152,6 @@ valid_loss_list = []
 dice_score_list =  []
 lr_rate_list =  []
 valid_loss_min = 1e7
-
 
 #%%
 
@@ -154,19 +171,7 @@ for epoch in range(1, n_epochs+1):
         for i in range(data.size()[0]):
             
             if use_global:
-                img = data[i].squeeze()
-                fac = int(img.shape[0]/64)
-                img = block_reduce(img, (fac,fac,fac), np.mean)
-                img = torch.from_numpy(img).unsqueeze(0).unsqueeze(0).cuda()
-                with torch.no_grad():
-                    pred_global = model_global(img)[0]
-                
-                subject = tio.Subject({
-                    'image': tio.ScalarImage(tensor = data[i]),
-                    'labels': tio.LabelMap(tensor = target[i]),
-                    'pred_global': tio.ScalarImage(tensor = pred_global.squeeze(0))
-                    })
-                
+                subject = get_subject_globpred(data[i], target[i])        
             else:
                 subject = tio.Subject({
                     'image': tio.ScalarImage(tensor = data[i]),
@@ -179,15 +184,17 @@ for epoch in range(1, n_epochs+1):
         sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:2, 1:8})
         patches_queue = tio.data.Queue(subjects_dataset=subjects_dataset, max_length = 48, 
                                        samples_per_volume= 12, sampler = sampler)
-        print(patches_queue)
-        patches_loader = DataLoader(patches_queue, batch_size = 4, num_workers=0)
+        patches_loader = DataLoader(patches_queue, batch_size = patch_bs, num_workers=0)
         
         for patch_subject in patches_loader:
-            patch_subject
             patch_data, patch_target = patch_subject['image'][tio.DATA], patch_subject['labels'][tio.DATA]
             # move tensors to GPU if CUDA is available
             if train_on_gpu:
                 patch_data, patch_target = patch_data.cuda(), patch_target.cuda()
+            if use_global:
+                patch_global = patch_subject['pred_global'][tio.DATA]
+                patch_data = torch.cat((patch_data, patch_global),1)
+            
             # clear the gradients of all optimized variables
             optimizer.zero_grad()
             # forward pass: compute predicted outputs by passing inputs to the model
@@ -215,11 +222,15 @@ for epoch in range(1, n_epochs+1):
         for data, target in bar:
             subject_eval_list = []
             for i in range(data.size()[0]):
-                subject_eval = tio.Subject({
-                    'image': tio.ScalarImage(tensor = data[i]),
-                    'labels': tio.LabelMap(tensor = target[i])
-                    })
-                subject_eval_list.append(subject)
+                if use_global:
+                    subject_eval = get_subject_globpred(data[i], target[i])        
+                
+                else:
+                    subject_eval = tio.Subject({
+                        'image': tio.ScalarImage(tensor = data[i]),
+                        'labels': tio.LabelMap(tensor = target[i])
+                        })
+                subject_eval_list.append(subject_eval)
             subjects_eval_dataset = tio.SubjectsDataset(subject_eval_list)
             sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:3, 1:7})
             patches_eval_queue = tio.data.Queue(subjects_dataset=subjects_eval_dataset,
@@ -229,6 +240,11 @@ for epoch in range(1, n_epochs+1):
             
             for patch_subject in patches_loader:
                 patch_data, patch_target = patch_subject['image'][tio.DATA], patch_subject['labels'][tio.DATA]
+                
+                if use_global:
+                    patch_global = patch_subject['pred_global'][tio.DATA]
+                    patch_data = torch.cat((patch_data, patch_global), 1)
+
                 # move tensors to GPU if CUDA is available
                 if train_on_gpu:
                     patch_data, patch_target = patch_data.to('cuda:0'), patch_target.to('cuda:0')
@@ -267,9 +283,9 @@ for epoch in range(1, n_epochs+1):
     plt.savefig('plots/val/%s_ep%d.pdf'%(index,epoch))
         
     # calculate average losses
-    train_loss = train_loss/len(train_loader.dataset)
-    valid_loss = valid_loss/len(valid_loader.dataset)
-    dice_score = dice_score/len(valid_loader.dataset)
+    train_loss = train_loss/len(train_loader.dataset)/patch_bs
+    valid_loss = valid_loss/len(valid_loader.dataset)/patch_bs
+    dice_score = dice_score/len(valid_loader.dataset)/patch_bs
     train_loss_list.append(train_loss)
     valid_loss_list.append(valid_loss)
     lr_rate_list.append([param_group['lr'] for param_group in optimizer.param_groups])
@@ -295,13 +311,17 @@ for epoch in range(1, n_epochs+1):
     preds = []; gts = []; uncers=[]
     count = 0
     for data, target in tq(test_loader):
-        subject = tio.Subject({
-            'image': tio.ScalarImage(tensor = data[0]),
-            'labels': tio.LabelMap(tensor = target[0])
-            })
+        if use_global:
+            subject = get_subject_globpred(data[0], target[0])        
+                
+        else:
+            subject = tio.Subject({
+                'image': tio.ScalarImage(tensor = data[0]),
+                'labels': tio.LabelMap(tensor = target[0])
+                })
             
 
-        sampler = tio.data.LabelSampler(patch_size = 24, label_probabilities = {0:3, 1:7})
+        sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:3, 1:7})
         generator = sampler(subject, num_patches = 8)
 
         
@@ -309,6 +329,9 @@ for epoch in range(1, n_epochs+1):
         
         for patch_subject in generator:
             patch_data, patch_target = patch_subject['image'].data, patch_subject['labels'].data
+            if use_global:
+                patch_global =  patch_subject['pred_global'].data
+                patch_data = torch.cat((patch_data, patch_global), 1)
             # move tensors to GPU if CUDA is available
             if train_on_gpu:
                 if len(patch_data.size())==4:
