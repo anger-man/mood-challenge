@@ -11,7 +11,6 @@ Created on Mon Aug  1 15:53:13 2022
 #load packages
 
 import torch
-torch.cuda.get_device_name(0)
 import torchvision
 import torch.nn as nn
 from torchsummary import summary
