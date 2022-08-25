@@ -87,7 +87,7 @@ test_loader = DataLoader(
 # validate the model on data with random masks #
 ################################################
 model.eval() #to tell layers you are in test mode (batchnorm, dropout,....)
-valid_loss = 0.0; save_data = 0; count=0
+valid_loss = 0.0; save_data = 0; count=0; ll=[]
 os.mkdir(os.path.join('testing',index))
 os.mkdir(os.path.join('testing',index,'final'))
 os.mkdir(os.path.join('testing',index,'final_label'))
@@ -122,6 +122,7 @@ with torch.no_grad(): #deactivates the autograd engine
                 nif_inp = nib.Nifti1Image(inp[ns],affine=afm[ns])
                 nib.save(nif_inp, os.path.join('testing',index,'final/%d.nii.gz'%count))
                 nif_tar = nib.Nifti1Image(tar[ns],affine=afm[ns])
+                ll.append(np.max(tar[ns]))
                 nib.save(nif_tar, os.path.join('testing',index,'final_label/%d.nii.gz'%count))
                 count+=1
             

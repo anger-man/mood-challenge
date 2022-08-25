@@ -23,7 +23,7 @@ from scipy.ndimage import rotate
 import time
 from skimage.measure import block_reduce
 from skimage.filters import sobel
-from models import unet
+from models import unet, random_net
 
     
 #%%
@@ -75,7 +75,7 @@ def random_intensity(data, rand_mask):
     Set voxel values of data to the same random intensity wrt to 
     the random mask
     """
-    rand_int = np.random.choice(np.linspace(data.min(),data.max(),1000))
+    rand_int = np.random.choice(np.linspace(.1,data.max(),1000))
     per_data = np.where(rand_mask!=1,data,rand_int)
     return per_data
 
@@ -87,7 +87,7 @@ def add_gaussian_noise(data, rand_mask):
     the random mask
     """
     scale=np.random.uniform(.1,.2)
-    noisy_sample = data + np.random.normal(loc=0, scale=scale,
+    noisy_sample = data + np.random.normal(loc=0, scale=scale*np.max(data),
                                            size=data.shape)
     per_data = np.where(rand_mask!=1,data,noisy_sample)
     return per_data
@@ -111,13 +111,13 @@ def apply_sobel_filter(data, rand_mask):
     Apply the sobel filter to the regions indicated by  
     the random mask
     """
-    sobel_data = sobel(data)
+    sobel_data = sobel(data)+np.random.choice([0.,.1,.2])
     per_data = np.where(rand_mask!=1,data,sobel_data)
     return per_data
 
 ###############################################################################
 
-per_model = unet(n_channels = 1, f_size=2)
+per_model = random_net(n_channels = 1, f_size=8)
 per_model.eval()
 
 
@@ -130,12 +130,12 @@ def random_convolution(data, rand_mask, per_model = per_model):
     Select a region wrt to the random mask and propagate it through a vanilla
     Unet with random initialization
     """
-    per_model.apply(weight_reset)
+    #per_model.apply(weight_reset)
     # m = np.mean(data[data!=0]); sd = np.std(data[data!=0])
     m = np.mean(data); sd = np.std(data)
     foo = np.expand_dims(np.expand_dims(data,0),0)
     foo = per_model(torch.from_numpy(foo))
-    foo = foo[0].cpu().detach().numpy()[0,0]
+    foo = foo.cpu().detach().numpy()[0,0]
     # foo = np.clip((foo-np.mean(foo[data!=0]))/np.std(foo[data!=0]) * sd + m,0,1e7)
     foo = np.clip((foo-np.mean(foo))/np.std(foo) * sd + m,0,1e7)
     per_data = np.where(rand_mask!=1,data,foo)
@@ -159,67 +159,63 @@ def generate_random_mask(
     """
     
     #define the maximal diameter of a connected component relative to the mask dimension
-    diameter = 48/dim
+    diameter = 64/dim
     a = dim*diameter
 
     prop=np.random.uniform(0,propval),
     f = np.zeros([dim, dim, dim])
     x = np.linspace(-dim/2, dim/2-1, dim)
     X,Y,Z = np.meshgrid(x,x,x)
-    
-    generate_components = np.random.rand()
-    if generate_components>.2:
+            
+    for dummy in range(4):
         
-        for dummy in range(4):
+        shape = np.random.choice(['elliptical','cuboid','non-convex'])
             
-            shape = np.random.choice(['elliptical','cuboid','non-convex'])
-                
-            if shape=='elliptical':
-                aa = a*np.random.uniform(.1,1)
-                bb = a*np.random.uniform(.1,1)
-                cc = a*np.random.uniform(.1,1)
+        if shape=='elliptical':
+            aa = a*np.random.uniform(.4,1)/2
+            bb = a*np.random.uniform(.4,1)/2
+            cc = a*np.random.uniform(.4,1)/2
+        
+            X_shift = X - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
+            Y_shift = Y - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
+            Z_shift = Z - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
+        
+            idx = (X_shift**2/aa**2 + Y_shift**2/bb**2 + Z_shift**2/cc**2) <= 1
+            idx = np.rot90(idx,k=np.random.choice([1,2,3]))
+            f[idx] = 1
+            fflat = f.flatten()
             
-                X_shift = X - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
-                Y_shift = Y - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
-                Z_shift = Z - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
+            if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
+                break
             
-                idx = (X_shift**2/aa**2 + Y_shift**2/bb**2 + Z_shift**2/cc**2) <= 1
-                idx = np.rot90(idx,k=np.random.choice([1,2,3]))
-                f[idx] = 1
-                fflat = f.flatten()
-                
-                if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
-                    break
-                
-            elif shape=='cuboid':
-                aa = int(.5*a*np.random.uniform(.1,1))
-                bb = int(.5*a*np.random.uniform(.1,1))
-                cc = int(.5*a*np.random.uniform(.1,1))
+        elif shape=='cuboid':
+            aa = int(.5*a*np.random.uniform(.4,1))
+            bb = int(.5*a*np.random.uniform(.4,1))
+            cc = int(.5*a*np.random.uniform(.4,1))
+        
+            x_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
+            y_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
+            z_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
+        
+            f[x_mid-aa:x_mid+aa,y_mid-bb:y_mid+bb,z_mid-cc:z_mid+cc] = 1
+            fflat = f.flatten()
             
-                x_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
-                y_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
-                z_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
+            if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
+                break
             
-                f[x_mid-aa:x_mid+aa,y_mid-bb:y_mid+bb,z_mid-cc:z_mid+cc] = 1
-                fflat = f.flatten()
-                
-                if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
-                    break
-                
-            elif shape=='non-convex':
-                files = os.listdir('arrays')
-                mask = np.load(os.path.join('arrays',np.random.choice(files)))
+        elif shape=='non-convex':
+            files = os.listdir('arrays')
+            mask = np.load(os.path.join('arrays',np.random.choice(files)))
+        
+            f[mask==1] = 1
+            fflat = f.flatten()
             
-                f[mask==1] = 1
-                fflat = f.flatten()
-                
-                if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
-                    break
-                
-            else:
-                print('No valid shape'); pass;
-                
-    
+            if np.count_nonzero(fflat)/np.prod(f.shape) >= prop:
+                break
+            
+        else:
+            print('No valid shape'); pass;
+            
     return f.astype(np.uint8)
         
 #%%
@@ -301,12 +297,14 @@ class MedicalDataset(Dataset):
             #define the random mask
             rand_mask = generate_random_mask(dim=data.shape[0],
                                         shape_prop=[.5,.5])
-            # mask[data==0]=0 
+            if np.sum(rand_mask[data!=0]) < (16**3): #results into 20% having zero masks
+                rand_mask = np.zeros((data.shape[0],
+                                      data.shape[1], data.shape[2])).astype(np.uint8) 
             #according to challenge page no guarantee that components lie within the
             # investigated object
             
             type_of_per = np.random.choice(['rand_int','gauss_noise',
-                                            'scale_int','sobel','rand_conv'])
+                                            'scale_int','sobel'])
             
             if type_of_per == 'rand_int':
                 per_data = random_intensity(data,rand_mask)
@@ -330,8 +328,10 @@ class MedicalDataset(Dataset):
                 #scale the data to [64,64,64]
                 if self.reduce_dim:
                     fac = int(per_data.shape[0]/64)
-                    per_data = block_reduce(per_data, (fac,fac,fac), np.mean)
-                    rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.max)
+                    #per_data = block_reduce(per_data, (fac,fac,fac), np.mean)
+                    #rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.max)
+                    per_data = per_data[::fac,::fac,::fac]
+                    rand_mask = rand_mask[::fac,::fac,::fac]
                     
                 if self.affine_matrix:
                     return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0),aff_mat
@@ -341,7 +341,8 @@ class MedicalDataset(Dataset):
             else:
                 if self.reduce_dim:
                     fac = int(data.shape[0]/64)
-                    data = block_reduce(data, (fac,fac,fac), np.mean)   
+                    #data = block_reduce(data, (fac,fac,fac), np.mean)   
+                    data = data[::fac,::fac,::fac]
                     
                 data = np.expand_dims(data,0)
                 if self.affine_matrix:

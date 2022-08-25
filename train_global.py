@@ -30,7 +30,6 @@ import matplotlib.pyplot as plt
 from tqdm import tqdm as tq
 from scipy.ndimage import rotate
 import time
-from skimage.measure import block_reduce
 from datetime import datetime
 from data_functions import generate_random_mask, add_gaussian_noise, random_intensity
 from data_functions import DiceLoss, MedicalDataset
@@ -90,8 +89,8 @@ if train_on_gpu:
     model.cuda()
 summary(model, (1,64,64,64))
 #we use Adam algorithm, the lr is already fine-tuned
-optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.25, patience=5, cooldown=3)
+optimizer = torch.optim.Adam(model.parameters(), lr=4e-4)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=3)
 
 #define a index for the plots and saved model parameters
 dt = datetime.now()
@@ -104,7 +103,7 @@ index = '%d%d%d_%d%d_global'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 
 torch.cuda.empty_cache()
 gc.collect()
-batch_size = 4
+batch_size = 6
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
@@ -117,7 +116,7 @@ test_loader = DataLoader(
     num_workers = 6)
 
 
-n_epochs = 50
+n_epochs = 70
 train_loss_list = []
 valid_loss_list = []
 dice_score_list =  []

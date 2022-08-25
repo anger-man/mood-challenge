@@ -83,7 +83,7 @@ test_dataset = MedicalDataset(
 #%%
 
 #the considered loss function is the DiceLoss
-criterion = DiceLoss()
+criterion = DiceLoss(evaluation_mode = False)
 
 
 #option to use the prediction of the global network as second channel.
@@ -108,8 +108,8 @@ if train_on_gpu:
     #model.cuda()
 summary(model, (n_channels,64,64,64))
 #we use Adam algorithm, the lr is already fine-tuned
-optimizer = torch.optim.Adam(model.parameters(), lr=2e-4)
-scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.5, patience=3, cooldown=2)
+optimizer = torch.optim.Adam(model.parameters(), lr=4e-4)
+scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=3)
 
 #define a index for the plots and saved model parameters
 dt = datetime.now()
@@ -118,8 +118,9 @@ index = '%d%d%d_%d%d_local'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 def get_subject_globpred(data, target):
     img = data.squeeze()
     fac = int(img.shape[0]/64)
-    img = block_reduce(img, (fac, fac, fac), np.mean)
-    img = torch.from_numpy(img).unsqueeze(0).unsqueeze(0).cuda()
+    #img = block_reduce(img, (fac, fac, fac), np.mean)
+    img = img[::fac,::fac,::fac]
+    img = img.unsqueeze(0).unsqueeze(0).cuda()
     with torch.no_grad():
         pred_global = model_global(img)[0]
     up = nn.Upsample(scale_factor = fac)
@@ -139,14 +140,14 @@ def get_subject_globpred(data, target):
 torch.cuda.empty_cache()
 gc.collect()
 batch_size = 4
-patch_bs = 1
+patch_bs = 6
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
 valid_loader = DataLoader(vali_dataset, batch_size=4, shuffle=True, num_workers=6)
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=6)
 
 
-n_epochs = 50
+n_epochs = 70
 train_loss_list = []
 valid_loss_list = []
 dice_score_list =  []
@@ -216,7 +217,8 @@ for epoch in range(1, n_epochs+1):
     ######################
     model.eval() #to tell layers you are in test mode (batchnorm, dropout,....)
     del data, target
-    save_data = 1
+    save_data = 0
+    preds = []; gts = []
     with torch.no_grad(): #deactivates the autograd engine
         bar = tq(valid_loader, postfix={"valid_loss":0.0})
         for data, target in bar:
@@ -236,11 +238,12 @@ for epoch in range(1, n_epochs+1):
             patches_eval_queue = tio.data.Queue(subjects_dataset=subjects_eval_dataset,
                                                 max_length=48, samples_per_volume=12, sampler=sampler)
             
-            patches_loader = DataLoader(patches_eval_queue, batch_size = 4)
+            patches_loader = DataLoader(patches_eval_queue, batch_size = patch_bs, num_workers=0)
             
             for patch_subject in patches_loader:
                 patch_data, patch_target = patch_subject['image'][tio.DATA], patch_subject['labels'][tio.DATA]
-                
+                if train_on_gpu:
+                    patch_data, patch_target = patch_data.cuda(), patch_target.cuda()
                 if use_global:
                     patch_global = patch_subject['pred_global'][tio.DATA]
                     patch_data = torch.cat((patch_data, patch_global), 1)
@@ -256,16 +259,16 @@ for epoch in range(1, n_epochs+1):
                     valid_loss += loss.item()*data.size(0)
                     # dice_cof = dice_no_threshold(output.cpu(), target.cpu()).item()
                     # dice_score +=  dice_cof * data.size(0)
-        bar.set_postfix(ordered_dict={"valid_loss":loss.item()})
-        if save_data:
-            preds = output[0].cpu().detach().numpy()[:,0]
-            uncer = output[1].cpu().detach().numpy()[:,0]
-            gts   = patch_target.cpu().detach().numpy()[:,0]
-            save_data = 0
+            if save_data<4:
+                preds.append(output[0].cpu().detach().numpy()[0,0])
+                gts.append(patch_target.cpu().detach().numpy()[0,0])
+                save_data +=1
                 
+        bar.set_postfix(ordered_dict={"valid_loss":loss.item()})
+        
     
     fig, ax = plt.subplots(4,4,figsize=(12,10)); 
-    for j in range(preds.shape[0]):
+    for j in range(len(preds)):
         im = ax[j,0].imshow(np.sum(gts[j],0), cmap='Greys_r')
         ax[j,0].axis('off')
         plt.colorbar(im,ax=ax[j,0])
@@ -275,7 +278,7 @@ for epoch in range(1, n_epochs+1):
         im = ax[j,2].imshow(np.abs(np.sum(gts[j]-preds[j],0)), cmap='gist_rainbow')
         ax[j,2].axis('off')
         plt.colorbar(im,ax=ax[j,2])
-        im = ax[j,3].imshow(np.sum(uncer[j],0), cmap='gist_rainbow')
+        im = ax[j,3].imshow(np.abs(np.sum(gts[j]-preds[j],0)), cmap='gist_rainbow')
         ax[j,3].axis('off')
         plt.colorbar(im,ax=ax[j,3])
         
@@ -283,9 +286,9 @@ for epoch in range(1, n_epochs+1):
     plt.savefig('plots/val/%s_ep%d.pdf'%(index,epoch))
         
     # calculate average losses
-    train_loss = train_loss/len(train_loader.dataset)/patch_bs
-    valid_loss = valid_loss/len(valid_loader.dataset)/patch_bs
-    dice_score = dice_score/len(valid_loader.dataset)/patch_bs
+    train_loss = train_loss/len(train_loader.dataset)/(patch_bs*12)
+    valid_loss = valid_loss/len(valid_loader.dataset)/(patch_bs*12)
+    dice_score = dice_score/len(valid_loader.dataset)/(patch_bs*12)
     train_loss_list.append(train_loss)
     valid_loss_list.append(valid_loss)
     lr_rate_list.append([param_group['lr'] for param_group in optimizer.param_groups])
@@ -329,9 +332,11 @@ for epoch in range(1, n_epochs+1):
         
         for patch_subject in generator:
             patch_data, patch_target = patch_subject['image'].data, patch_subject['labels'].data
+            if train_on_gpu:
+                patch_data, patch_target = patch_data.cuda(), patch_target.cuda()
             if use_global:
                 patch_global =  patch_subject['pred_global'].data
-                patch_data = torch.cat((patch_data, patch_global), 1)
+                patch_data = torch.cat((patch_data, patch_global), 0)
             # move tensors to GPU if CUDA is available
             if train_on_gpu:
                 if len(patch_data.size())==4:
