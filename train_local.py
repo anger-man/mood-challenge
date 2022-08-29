@@ -5,12 +5,7 @@ Created on Wed Aug  3 10:43:49 2022
 @author: A0067477
 """
 
-#%%
 
-# define the task [brain,abdom] and the corresponding data directory
-
-task = 'brain'
-data_path = 'data/%s'%task
 
 #%%
 
@@ -36,6 +31,25 @@ import time
 from data_functions import generate_random_mask, add_gaussian_noise, random_intensity
 from data_functions import DiceLoss, MedicalDataset
 from models import unet
+import optparse
+
+    
+#%%
+
+parser = optparse.OptionParser()
+parser.add_option('--ug', action="store", dest="ug", default=False)
+parser.add_option('--task', action="store", dest="task",default='brain')
+options,args = parser.parse_args()
+use_global = options.ug
+
+if use_global:
+    time.sleep(120)
+#%%
+
+# define the task [brain,abdom] and the corresponding data directory
+
+task = options.task
+data_path = 'data/%s'%task
 
 #%%
 
@@ -87,7 +101,6 @@ criterion = DiceLoss(evaluation_mode = False)
 
 
 #option to use the prediction of the global network as second channel.
-use_global = True
 n_channels = 1
 if use_global:
     model_global = unet(n_channels=1, f_size=32)
@@ -164,6 +177,7 @@ for epoch in range(1, n_epochs+1):
     ###################
     # train the model #
     ###################
+    dummy0 = 0
     model.train()
     bar = tq(train_loader, postfix={"train_loss":0.0})
     #train_loader contains all whole training images 
@@ -182,7 +196,7 @@ for epoch in range(1, n_epochs+1):
             subject_list.append(subject)
 
         subjects_dataset = tio.SubjectsDataset(subject_list)
-        sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:2, 1:8})
+        sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:3, 1:7})
         patches_queue = tio.data.Queue(subjects_dataset=subjects_dataset, max_length = 48, 
                                        samples_per_volume= 12, sampler = sampler)
         patches_loader = DataLoader(patches_queue, batch_size = patch_bs, num_workers=0)
@@ -208,6 +222,7 @@ for epoch in range(1, n_epochs+1):
             optimizer.step()
             # update training loss
             train_loss += loss.item()*patch_data.size(0)
+            dummy0 += 1
 
         bar.set_postfix(ordered_dict={"train_loss":loss.item()})
         bar.update(n=1)
@@ -215,6 +230,7 @@ for epoch in range(1, n_epochs+1):
     ######################    
     # validate the model #
     ######################
+    dummy = 0
     model.eval() #to tell layers you are in test mode (batchnorm, dropout,....)
     del data, target
     save_data = 0
@@ -257,6 +273,7 @@ for epoch in range(1, n_epochs+1):
                     loss = criterion(output[0], patch_target)
                     # update average validation loss 
                     valid_loss += loss.item()*data.size(0)
+                    dummy +=1
                     # dice_cof = dice_no_threshold(output.cpu(), target.cpu()).item()
                     # dice_score +=  dice_cof * data.size(0)
             if save_data<4:
@@ -286,9 +303,8 @@ for epoch in range(1, n_epochs+1):
     plt.savefig('plots/val/%s_ep%d.pdf'%(index,epoch))
         
     # calculate average losses
-    train_loss = train_loss/len(train_loader.dataset)/(patch_bs*12)
-    valid_loss = valid_loss/len(valid_loader.dataset)/(patch_bs*12)
-    dice_score = dice_score/len(valid_loader.dataset)/(patch_bs*12)
+    train_loss = train_loss/patch_bs/dummy0
+    valid_loss = valid_loss/patch_bs/dummy
     train_loss_list.append(train_loss)
     valid_loss_list.append(valid_loss)
     lr_rate_list.append([param_group['lr'] for param_group in optimizer.param_groups])

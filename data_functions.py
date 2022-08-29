@@ -261,6 +261,7 @@ class MedicalDataset(Dataset):
             self.disturb_input = disturb_input
             self.affine_matrix = affine_matrix
             self.datatype = datatype
+            self.task = task
             
          ######################################################################   
             
@@ -268,11 +269,15 @@ class MedicalDataset(Dataset):
             
     def __getitem__(self,idx):
         
+        if self.task == 'abdom':
+            subs = 2
+        else:
+            subs = 1
         if self.datatype == 'final':
             image_name = self.img_ids[idx]
             image_path = os.path.join(self.img_folder , image_name)
             nifti = nib.load(image_path)
-            data = nifti.get_fdata()
+            data = nifti.get_fdata()[::subs,::subs,::subs]
             aff_mat = nifti.affine
             
             target_path = os.path.join(self.tar_folder , image_name)
@@ -289,7 +294,7 @@ class MedicalDataset(Dataset):
             
             #load the nifti file (affine matrix is omitted here)
             nifti = nib.load(image_path)
-            data = nifti.get_fdata()#[::2,::2,::2]
+            data = nifti.get_fdata()[::subs,::subs,::subs]
             data /= np.quantile(data,.98)
             aff_mat = nifti.affine
             

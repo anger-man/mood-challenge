@@ -109,7 +109,7 @@ train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
     num_workers = 6)
 valid_loader = DataLoader(
-    vali_dataset, batch_size=batch_size, shuffle=True,
+    vali_dataset, batch_size=4, shuffle=True,
     num_workers = 6)
 test_loader = DataLoader(
     test_dataset, batch_size=1, shuffle=True,
