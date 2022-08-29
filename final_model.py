@@ -34,10 +34,58 @@ from datetime import datetime
 from data_functions import generate_random_mask, add_gaussian_noise, random_intensity
 from data_functions import DiceLoss, MedicalDataset, BCE
 from models import unet
+from torchmetrics.functional import average_precision
 
 #%%
 
 train_on_gpu = torch.cuda.is_available()
+
+
+#%%
+
+#generate evaluation data
+
+# #only use samples that have been unseen during training
+# vali_ids = np.sort(os.listdir(os.path.join(data_path,'%s_train'%task)))[::6]
+# vali_dataset = MedicalDataset(
+#     datatype = 'train',
+#     path = data_path,
+#     task = task,
+#     img_ids = vali_ids,
+#     affine_matrix = True,
+#     reduce_dim = False)
+
+# valid_loader = DataLoader(
+#     vali_dataset, batch_size=4, shuffle=True,
+#     num_workers = 6)
+
+# #define a index for the plots and saved model parameters
+# dt = datetime.now()
+# index = '%d%d%d_%d%d'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
+
+
+# os.mkdir(os.path.join('testing',index))
+# os.mkdir(os.path.join('testing',index,'final'))
+# os.mkdir(os.path.join('testing',index,'final_label'))
+# count = 0; ll=[]
+# with torch.no_grad(): #deactivates the autograd engine
+#     bar = tq(valid_loader, postfix={"valid_loss":0.0})
+#     for data, target,aff_mat in bar:
+#         # move tensors to GPU if CUDA is available
+    
+#         inp   = data.cpu().detach().numpy()[:,0].astype(np.float32)
+#         tar   = target.cpu().detach().numpy()[:,0]
+#         afm   = aff_mat.cpu().detach().numpy()
+        
+#         # save predictions as nifti
+#         for ns in range(inp.shape[0]):
+#             nif_inp = nib.Nifti1Image(inp[ns],affine=afm[ns])
+#             nib.save(nif_inp, os.path.join('testing',index,'final/%d.nii.gz'%count))
+#             nif_tar = nib.Nifti1Image(tar[ns],affine=afm[ns])
+#             ll.append(np.max(tar[ns]))
+#             nib.save(nif_tar, os.path.join('testing',index,'final_label/%d.nii.gz'%count))
+#             count+=1
+#         print(ll)
 
 #%%
 
@@ -47,7 +95,7 @@ train_on_gpu = torch.cuda.is_available()
 input_path = os.path.join(data_path,'final')
 input_ids = np.sort([os.path.join(input_path,f) for f in os.listdir(input_path)])
 
-target_path = os.path.join(data_path,'final')
+target_path = os.path.join(data_path,'final_label')
 target_ids = np.sort([os.path.join(target_path,f) for f in os.listdir(target_path)])
 
 
@@ -55,14 +103,15 @@ target_ids = np.sort([os.path.join(target_path,f) for f in os.listdir(target_pat
 
 #evaluate the global model for downsampled version of spatial size 64x64x64 
 
-criterion = DiceLoss(evaluation_mode = True)
+criterion = BCE()
 
 model_global = unet(n_channels = 1, f_size=32)
 if train_on_gpu:
     model_global.cuda()
 model_global.load_state_dict(torch.load('weights/weights_%s_global.pt'%task))
 
-model_local = unet(n_channels = 1, f_size=32)
+
+model_local = unet(n_channels = 2, f_size=32)
 if train_on_gpu:
     model_local.cuda()
 model_local.load_state_dict(torch.load('weights/weights_%s_local.pt'%task))
@@ -73,32 +122,84 @@ index = '%d%d%d_%d%d_final'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 
 
 
-        
+
 ################################################
 # validate the model on data with random masks #
 ################################################
-model_global.eval() 
-model_local.eval()
-valid_loss = 0.0; save_data = 0; count=0
 
-for k in range(len(input_ids)):
-    nifti = nib.load(input_ids[k])
-    data = nifti.get_fdata()
-    data = np.expand_dims(np.expand_dims(data,0),0)
-    data = torch.from_numpy(data)
-    pred = model_global(data)[0]
+def evaluate(model_global, model_local):
+    model_global.eval() 
+    model_local.eval()
+    GLOBAL = 0.0; FINAL = 0.0; save_data = 0
+    sg = []; sf = []
     
-    nifti = nib.load(target_ids[k])
-    target = nifti.get_fdata()
-    target = np.expand_dims(np.expand_dims(target,0),0)
-    target = torch.from_numpy(target)
-    pred = model_global(target)[0]
-    loss = criterion(pred[0], target)
-    valid_loss += loss.item()*data.size(0)
-    
-    #TO BE CONTINUED
-    
-    
-    
-
-    
+    if task == 'abdom':
+        subs = 2
+    else:
+        subs = 1
+       
+    for itera in range(len(input_ids)):
+        #load target
+        nifti = nib.load(target_ids[itera])
+        target = nifti.get_fdata()[::subs,::subs,::subs].astype(np.uint8)
+        sg.append(target.max())
+        target = torch.from_numpy(target)
+        target = target.unsqueeze(0).unsqueeze(0)
+        
+        #load input
+        nifti = nib.load(input_ids[itera])
+        data = nifti.get_fdata()[::subs,::subs,::subs]
+        dim = data.shape[0]
+        aff_mat = nifti.affine
+        fac = int(dim/64)
+        img_down = torch.from_numpy(data[::fac,::fac,::fac])
+        img_down = img_down.unsqueeze(0).unsqueeze(0)
+        data = torch.from_numpy(data).unsqueeze(0).unsqueeze(0)
+        
+        #switch to gpu if cuda available
+        if train_on_gpu:
+            img_down = img_down.cuda()
+            target = target.cuda()
+            data = data.cuda()
+        
+        #evaluate global model
+        with torch.no_grad():
+            pred_global = model_global(img_down)[0]
+        up = nn.Upsample(scale_factor = fac)
+        pred_global = up(pred_global)
+        loss_global = criterion(pred_global, target).item()
+        # ap_global = average_precision(pred_global.reshape(-1),target.reshape(-1)).item()
+        
+        #evaluate local model
+        ii = np.arange(0,dim,32); count = 0
+        final_pred = pred_global.clone()
+        if torch.max(pred_global).item()<.5:
+            final_pred = torch.zeros(pred_global.shape).cuda()
+        else:
+            for i in ii:
+                for j in ii:
+                    for k in ii:
+                        patch = pred_global[:,:,i:i+64,j:j+64,k:k+64]
+                        if torch.sum(patch).item()<.5*2**3:
+                            continue;
+                        else:
+                            inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
+                            with torch.no_grad():
+                                tmp = model_local(inp_data)[0]
+                            final_pred[:,:,i:i+64,j:j+64,k:k+64] = tmp
+                            count += 1
+                        
+        loss_final = criterion(final_pred, target).item()
+        # ap_final = average_precision(final_pred.reshape(-1),target.reshape(-1)).item()
+        GLOBAL += loss_global; FINAL += loss_final
+        print('%.3f  %.3f  %03d' %(loss_global,loss_final, count))
+        
+        result = final_pred[0,0].cpu().detach().numpy()
+        if -np.sort(-result.reshape(-1))[9**3]>.5:
+            sf.append(1)
+        else:
+            sf.append(0)
+    return GLOBAL,FINAL,np.array(sg),np.array(sf)
+                    
+g,f,sg,sf = evaluate(model_global,model_local)
+print(np.sum(2*sg*sf)/(np.sum(sg)+np.sum(sf)))

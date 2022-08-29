@@ -37,8 +37,8 @@ class DiceLoss(nn.Module):
         super(DiceLoss, self).__init__()
 
     def forward(self, preds, targets):
-        preds = preds.view(-1) #equal to np.reshape(-1)
-        targets = targets.view(-1)  #equal to np.reshape(-1)
+        preds = preds.reshape(-1) #equal to np.reshape(-1)
+        targets = targets.reshape(-1)  #equal to np.reshape(-1)
         if self.evaluation_mode:
             preds = torch.round(preds)
             intersection = (preds * targets).sum()                            
@@ -57,8 +57,8 @@ class BCE(nn.Module):
         super(BCE, self).__init__()
 
     def forward(self, preds, targets):
-        preds = preds.view(-1) #equal to np.reshape(-1)
-        targets = targets.view(-1)  #equal to np.reshape(-1)
+        preds = preds.reshape(-1) #equal to np.reshape(-1)
+        targets = targets.reshape(-1)  #equal to np.reshape(-1)
         
         tmp = targets*torch.log(preds+self.eps)+(1.-targets)*torch.log(1.-preds+self.eps)
         return -torch.mean(tmp)
@@ -172,9 +172,9 @@ def generate_random_mask(
         shape = np.random.choice(['elliptical','cuboid','non-convex'])
             
         if shape=='elliptical':
-            aa = a*np.random.uniform(.4,1)/2
-            bb = a*np.random.uniform(.4,1)/2
-            cc = a*np.random.uniform(.4,1)/2
+            aa = a*np.random.uniform(.3,1)/2
+            bb = a*np.random.uniform(.3,1)/2
+            cc = a*np.random.uniform(.3,1)/2
         
             X_shift = X - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
             Y_shift = Y - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
@@ -189,9 +189,9 @@ def generate_random_mask(
                 break
             
         elif shape=='cuboid':
-            aa = int(.5*a*np.random.uniform(.4,1))
-            bb = int(.5*a*np.random.uniform(.4,1))
-            cc = int(.5*a*np.random.uniform(.4,1))
+            aa = int(.5*a*np.random.uniform(.3,1))
+            bb = int(.5*a*np.random.uniform(.3,1))
+            cc = int(.5*a*np.random.uniform(.3,1))
         
             x_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
             y_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
@@ -302,7 +302,7 @@ class MedicalDataset(Dataset):
             #define the random mask
             rand_mask = generate_random_mask(dim=data.shape[0],
                                         shape_prop=[.5,.5])
-            if np.sum(rand_mask[data!=0]) < (16**3): #results into 20% having zero masks
+            if np.sum(rand_mask[data>=0.05]) < (16**3) or np.random.rand()<.1: 
                 rand_mask = np.zeros((data.shape[0],
                                       data.shape[1], data.shape[2])).astype(np.uint8) 
             #according to challenge page no guarantee that components lie within the
@@ -316,13 +316,13 @@ class MedicalDataset(Dataset):
             elif type_of_per == 'gauss_noise':
                 per_data = add_gaussian_noise(data,rand_mask)
             elif type_of_per == 'rand_conv':
-                rand_mask[data==0] = 0
+                rand_mask[data<0.05] = 0
                 per_data = random_convolution(data,rand_mask)
             elif type_of_per == 'scale_int':
-                rand_mask[data==0] = 0
+                rand_mask[data<0.05] = 0
                 per_data = scale_intensity(data,rand_mask)
             elif type_of_per == 'sobel':
-                rand_mask[data==0] = 0
+                rand_mask[data<0.05] = 0
                 per_data = apply_sobel_filter(data,rand_mask)
             else:
                 print('Problem with data perturbations'); pass;

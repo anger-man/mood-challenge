@@ -1,1 +1,1 @@
-python /workspace/pred_simple.py -i $1 -o $2 -m 'sample'
+python /workspace/predict.py -i $1 -o $2 -m 'sample' -t 'abdom'

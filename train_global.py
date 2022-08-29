@@ -8,13 +8,6 @@ Created on Tue Jul 26 14:30:11 2022
 
 #%%
 
-# define the task [brain,abdom] and the corresponding data directory
-
-task = 'brain'
-data_path = 'data/%s'%task
-
-#%%
-
 #load packages
 
 import torch
@@ -35,6 +28,22 @@ from data_functions import generate_random_mask, add_gaussian_noise, random_inte
 from data_functions import DiceLoss, MedicalDataset
 from models import unet
 import time
+import optparse
+
+#%%
+
+parser = optparse.OptionParser()
+parser.add_option('--task', action="store", dest="task",default='brain')
+options,args = parser.parse_args()
+
+#%%
+
+# define the task [brain,abdom] and the corresponding data directory
+
+task = options.task
+data_path = 'data/%s'%task
+if task=='abdom':
+    time.sleep(70)
 
 #%%
 

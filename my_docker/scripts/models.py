@@ -18,7 +18,6 @@ from torch.utils.data import TensorDataset, DataLoader, Dataset
 import gc, os
 import numpy as np
 import nibabel as nib
-import matplotlib.pyplot as plt
 from tqdm import tqdm as tq
 from scipy.ndimage import rotate
 import time
@@ -163,3 +162,25 @@ class unet(nn.Module):
         unc_out = self.unc(obranch2)
         
         return([img_out,unc_out])
+    
+class random_net(nn.Module):
+    def __init__(self, n_channels, f_size, normalization='instance',
+                 out_acti = 'sigmoid'):
+        super(random_net, self).__init__()
+        self.dc0 = double_conv(n_channels, f_size, normalization)
+        self.dc1 = double_conv(f_size, f_size, normalization)
+        self.out = nn.Sequential(
+            Conv3dsep(f_size, 1,stride=1,padding='same'),   
+            nn.ModuleDict([['relu',nn.ReLU()],['sigmoid',nn.Sigmoid()]]
+                          )[out_acti])
+       
+        
+    def forward(self, x):
+        x = x.float()
+      
+        lay = self.dc0(x)
+        lay = self.dc1(lay)
+        img_out = self.out(lay)
+                
+        return(img_out)
+
