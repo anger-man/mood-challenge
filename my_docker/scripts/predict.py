@@ -57,8 +57,9 @@ def evaluate(model_global, model_local,source_file):
         pred_global = up(pred_global)
         
         #evaluate local model
-        ii = np.arange(0,dim,32); count = 0
-        final_pred = pred_global.clone()
+        ii = np.arange(0,240,48); count = 0
+        final_pred = torch.zeros(pred_global.shape).cuda()
+        hidden_mask = torch.zeros(pred_global.shape).cuda()
         if torch.max(pred_global).item()<.5:
             final_pred = torch.zeros(pred_global.shape).cuda()
         else:
@@ -72,11 +73,13 @@ def evaluate(model_global, model_local,source_file):
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
                             with torch.no_grad():
                                 tmp = model_local(inp_data)[0]
-                            final_pred[:,:,i:i+64,j:j+64,k:k+64] = tmp
+                            final_pred[:,:,i:i+64,j:j+64,k:k+64] += tmp
+                            hidden_mask[:,:,i:i+64,j:j+64,k:k+64] += 1
                             count += 1
+            final_pred = final_pred / torch.clip(hidden_mask,1,1e7)
                         
         result = final_pred[0,0].cpu().detach().numpy()
-        return(result,aff_mat)
+        return(result.astype(np.float32),aff_mat)
                         
                         
 
@@ -90,7 +93,7 @@ def predict_folder_pixel_abs(input_folder, target_folder, task):
         result, aff_mat = evaluate(model_global,model_local,source_file)
 
         if task == 'abdom':
-            result = np.repeat(result,(2,2,2))
+            result = result.repeat(2,axis=0).repeat(2,axis=1).repeat(2,axis=2)
         final_nimg = nib.Nifti1Image(result, affine=aff_mat)
         nib.save(final_nimg, target_file)
         print(target_file)

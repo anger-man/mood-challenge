@@ -103,7 +103,7 @@ target_ids = np.sort([os.path.join(target_path,f) for f in os.listdir(target_pat
 
 #evaluate the global model for downsampled version of spatial size 64x64x64 
 
-criterion = BCE()
+criterion = DiceLoss(evaluation_mode = True)
 
 model_global = unet(n_channels = 1, f_size=32)
 if train_on_gpu:
@@ -171,8 +171,10 @@ def evaluate(model_global, model_local):
         # ap_global = average_precision(pred_global.reshape(-1),target.reshape(-1)).item()
         
         #evaluate local model
-        ii = np.arange(0,dim,32); count = 0
-        final_pred = pred_global.clone()
+        ii = np.arange(0,240,48); count = 0
+        final_pred = torch.zeros(pred_global.shape).cuda()
+        # final_pred = pred_global.clone()
+        hidden_mask = torch.zeros(pred_global.shape).cuda()
         if torch.max(pred_global).item()<.5:
             final_pred = torch.zeros(pred_global.shape).cuda()
         else:
@@ -186,9 +188,11 @@ def evaluate(model_global, model_local):
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
                             with torch.no_grad():
                                 tmp = model_local(inp_data)[0]
-                            final_pred[:,:,i:i+64,j:j+64,k:k+64] = tmp
+                            final_pred[:,:,i:i+64,j:j+64,k:k+64] += tmp
+                            hidden_mask[:,:,i:i+64,j:j+64,k:k+64] += 1
                             count += 1
-                        
+            final_pred = final_pred / torch.clip(hidden_mask,1,1e7)
+        
         loss_final = criterion(final_pred, target).item()
         # ap_final = average_precision(final_pred.reshape(-1),target.reshape(-1)).item()
         GLOBAL += loss_global; FINAL += loss_final

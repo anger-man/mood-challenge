@@ -31,7 +31,7 @@ from models import unet, random_net
 # define the DiceLoss Function
 
 class DiceLoss(nn.Module):
-    def __init__(self, smooth: float=1e-6, evaluation_mode: bool=False):
+    def __init__(self, smooth: float=1e-3, evaluation_mode: bool=False):
         self.smooth = smooth
         self.evaluation_mode = evaluation_mode
         super(DiceLoss, self).__init__()
@@ -40,15 +40,17 @@ class DiceLoss(nn.Module):
         preds = preds.reshape(-1) #equal to np.reshape(-1)
         targets = targets.reshape(-1)  #equal to np.reshape(-1)
         if self.evaluation_mode:
-            preds = torch.round(preds)
+            # preds = torch.round(preds)
             intersection = (preds * targets).sum()                            
             dice = (2.*intersection + self.smooth)/(preds.sum() + targets.sum() + self.smooth)  
             return 1 - dice
         else:
-            intersection = (preds * targets).sum()                            
+            intersection = (preds * targets).sum()   
+            #bce = 2.*targets*torch.log(preds+self.smooth)+20/19*(1.-targets)*torch.log(1.-preds+self.smooth)
+            #bce = -torch.mean(bce)                       
             dice = (2.*intersection + self.smooth)/(preds.sum() + targets.sum() + self.smooth)  
             check_tar = torch.clip(targets.sum(),0,1) 
-            return( check_tar*(1-dice) + (1-check_tar)*torch.mean(torch.abs(targets-preds)) )
+            return(check_tar*(1-dice) + (1.-check_tar)*torch.mean(torch.abs(preds-targets)))
         
     
 class BCE(nn.Module):

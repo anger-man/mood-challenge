@@ -89,6 +89,7 @@ test_dataset = MedicalDataset(
 
 #the considered loss function is the DiceLoss
 criterion = DiceLoss(evaluation_mode = False)
+criterion_val = DiceLoss(evaluation_mode = True)
 
 #the output channel size of the first convolution equals 32
 model = unet(n_channels =1, f_size=32)
@@ -118,7 +119,7 @@ train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,
     num_workers = 6)
 valid_loader = DataLoader(
-    vali_dataset, batch_size=4, shuffle=True,
+    vali_dataset, batch_size=batch_size, shuffle=True,
     num_workers = 6)
 test_loader = DataLoader(
     test_dataset, batch_size=1, shuffle=True,
@@ -176,7 +177,7 @@ for epoch in range(1, n_epochs+1):
             # forward pass: compute predicted outputs by passing inputs to the model
             output = model(data)
             # calculate the batch loss
-            loss = criterion(output[0], target)
+            loss = criterion_val(output[0], target)
             # update average validation loss 
             valid_loss += loss.item()*data.size(0)
             # dice_cof = dice_no_threshold(output.cpu(), target.cpu()).item()
@@ -190,7 +191,7 @@ for epoch in range(1, n_epochs+1):
                 
     
     fig, ax = plt.subplots(4,4,figsize=(12,10)); 
-    for j in range(preds.shape[0]):
+    for j in range(4):
         im = ax[j,0].imshow(np.sum(gts[j],0), cmap='Greys_r')
         ax[j,0].axis('off')
         plt.colorbar(im,ax=ax[j,0])

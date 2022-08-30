@@ -37,18 +37,19 @@ import optparse
 #%%
 
 parser = optparse.OptionParser()
-parser.add_option('--ug', action="store", dest="ug", default=False)
 parser.add_option('--task', action="store", dest="task",default='brain')
 options,args = parser.parse_args()
-use_global = options.ug
+task = options.task
+use_global = True
 
-if use_global:
-    time.sleep(120)
+if task=='abdom':
+    time.sleep(70)
+    
 #%%
 
 # define the task [brain,abdom] and the corresponding data directory
 
-task = options.task
+
 data_path = 'data/%s'%task
 
 #%%
@@ -98,6 +99,7 @@ test_dataset = MedicalDataset(
 
 #the considered loss function is the DiceLoss
 criterion = DiceLoss(evaluation_mode = False)
+criterion_val = DiceLoss(evaluation_mode = True)
 
 
 #option to use the prediction of the global network as second channel.
@@ -156,7 +158,7 @@ batch_size = 4
 patch_bs = 6
 
 train_loader = DataLoader(train_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
-valid_loader = DataLoader(vali_dataset, batch_size=4, shuffle=True, num_workers=6)
+valid_loader = DataLoader(vali_dataset, batch_size=batch_size, shuffle=True, num_workers=6)
 test_loader = DataLoader(test_dataset, batch_size=1, shuffle=True, num_workers=6)
 
 
@@ -196,9 +198,9 @@ for epoch in range(1, n_epochs+1):
             subject_list.append(subject)
 
         subjects_dataset = tio.SubjectsDataset(subject_list)
-        sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:3, 1:7})
+        sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:2, 1:8})
         patches_queue = tio.data.Queue(subjects_dataset=subjects_dataset, max_length = 48, 
-                                       samples_per_volume= 12, sampler = sampler)
+                                       samples_per_volume= 8, sampler = sampler)
         patches_loader = DataLoader(patches_queue, batch_size = patch_bs, num_workers=0)
         
         for patch_subject in patches_loader:
@@ -250,9 +252,9 @@ for epoch in range(1, n_epochs+1):
                         })
                 subject_eval_list.append(subject_eval)
             subjects_eval_dataset = tio.SubjectsDataset(subject_eval_list)
-            sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:3, 1:7})
+            sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:2, 1:8})
             patches_eval_queue = tio.data.Queue(subjects_dataset=subjects_eval_dataset,
-                                                max_length=48, samples_per_volume=12, sampler=sampler)
+                                                max_length=48, samples_per_volume=8, sampler=sampler)
             
             patches_loader = DataLoader(patches_eval_queue, batch_size = patch_bs, num_workers=0)
             
@@ -270,7 +272,7 @@ for epoch in range(1, n_epochs+1):
                     # forward pass: compute predicted outputs by passing inputs to the model
                     output = model(patch_data)
                     # calculate the batch loss
-                    loss = criterion(output[0], patch_target)
+                    loss = criterion_val(output[0], patch_target)
                     # update average validation loss 
                     valid_loss += loss.item()*data.size(0)
                     dummy +=1
@@ -340,7 +342,7 @@ for epoch in range(1, n_epochs+1):
                 })
             
 
-        sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:3, 1:7})
+        sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:2, 1:8})
         generator = sampler(subject, num_patches = 8)
 
         
