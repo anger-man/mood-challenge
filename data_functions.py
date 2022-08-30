@@ -40,7 +40,7 @@ class DiceLoss(nn.Module):
         preds = preds.reshape(-1) #equal to np.reshape(-1)
         targets = targets.reshape(-1)  #equal to np.reshape(-1)
         if self.evaluation_mode:
-            # preds = torch.round(preds)
+            preds = torch.round(preds)
             intersection = (preds * targets).sum()                            
             dice = (2.*intersection + self.smooth)/(preds.sum() + targets.sum() + self.smooth)  
             return 1 - dice
@@ -101,7 +101,7 @@ def scale_intensity(data, rand_mask):
     """
     double or half the intensity of voxel values wrt to the random mask
     """
-    scale = np.random.choice([.5,2.])
+    scale = np.random.choice([.25,.5,1.5,2.])
     scaled = scale*data
     per_data = np.where(rand_mask!=1,data,scaled)
     return per_data
@@ -113,7 +113,7 @@ def apply_sobel_filter(data, rand_mask):
     Apply the sobel filter to the regions indicated by  
     the random mask
     """
-    sobel_data = sobel(data)+np.random.choice([0.,.1,.2])
+    sobel_data = sobel(data)+np.random.choice([0.,.15,.3,.45])
     per_data = np.where(rand_mask!=1,data,sobel_data)
     return per_data
 
@@ -174,9 +174,9 @@ def generate_random_mask(
         shape = np.random.choice(['elliptical','cuboid','non-convex'])
             
         if shape=='elliptical':
-            aa = a*np.random.uniform(.3,1)/2
-            bb = a*np.random.uniform(.3,1)/2
-            cc = a*np.random.uniform(.3,1)/2
+            aa = a*np.random.uniform(.4,1)/2
+            bb = a*np.random.uniform(.4,1)/2
+            cc = a*np.random.uniform(.4,1)/2
         
             X_shift = X - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
             Y_shift = Y - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1)
@@ -191,9 +191,9 @@ def generate_random_mask(
                 break
             
         elif shape=='cuboid':
-            aa = int(.5*a*np.random.uniform(.3,1))
-            bb = int(.5*a*np.random.uniform(.3,1))
-            cc = int(.5*a*np.random.uniform(.3,1))
+            aa = int(.5*a*np.random.uniform(.4,1))
+            bb = int(.5*a*np.random.uniform(.4,1))
+            cc = int(.5*a*np.random.uniform(.4,1))
         
             x_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
             y_mid = int(dim/2 - np.sign(0.5 - np.random.rand(1))*dim/2*np.random.rand(1))
@@ -304,7 +304,7 @@ class MedicalDataset(Dataset):
             #define the random mask
             rand_mask = generate_random_mask(dim=data.shape[0],
                                         shape_prop=[.5,.5])
-            if np.sum(rand_mask[data>=0.05]) < (16**3) or np.random.rand()<.1: 
+            if np.sum(rand_mask[data>=0.05]) < (16**3) or np.random.rand()<.05: 
                 rand_mask = np.zeros((data.shape[0],
                                       data.shape[1], data.shape[2])).astype(np.uint8) 
             #according to challenge page no guarantee that components lie within the

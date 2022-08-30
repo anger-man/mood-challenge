@@ -10,7 +10,7 @@ Created on Mon Aug  1 16:26:02 2022
 
 # define the task [brain,abdom] and the corresponding data directory
 
-task = 'brain'
+task = 'abdom'
 data_path = 'data/%s'%task
 
 #%%
@@ -138,7 +138,7 @@ def evaluate(model_global, model_local):
     else:
         subs = 1
        
-    for itera in range(len(input_ids)):
+    for itera in range(len(input_ids[:40])):
         #load target
         nifti = nib.load(target_ids[itera])
         target = nifti.get_fdata()[::subs,::subs,::subs].astype(np.uint8)
@@ -207,3 +207,13 @@ def evaluate(model_global, model_local):
                     
 g,f,sg,sf = evaluate(model_global,model_local)
 print(np.sum(2*sg*sf)/(np.sum(sg)+np.sum(sf)))
+
+#0.123 (40 samples, brain, 48 overlapping), sample acc. 0.98
+#0.120 (40 samples, brain, 32 overlapping), sample acc. 0.98
+#0.127 if non-overlapping , sample acc. 0.98
+
+
+#0.212 (40 samples, abdom, 48 overlapping), sample acc. 1.0
+#0.213 (40 samples, abdom, 32 overlapping), sample acc. 1.0
+#0.223 if non-overlapping , sample acc. 1.0
+
