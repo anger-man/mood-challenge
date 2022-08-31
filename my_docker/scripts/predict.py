@@ -39,6 +39,8 @@ def evaluate(model_global, model_local,source_file):
         dim = data.shape[0]
         if dim>256:
             data = data[::2,::2,::2]
+        data /= np.quantile(data,.98)
+        dim = data.shape[0]
         aff_mat = nifti.affine
         fac = int(dim/64)
         img_down = torch.from_numpy(data[::fac,::fac,::fac])
@@ -55,19 +57,23 @@ def evaluate(model_global, model_local,source_file):
             pred_global = model_global(img_down)[0]
         up = nn.Upsample(scale_factor = fac)
         pred_global = up(pred_global)
+        # ap_global = average_precision(pred_global.reshape(-1),target.reshape(-1)).item()
         
         #evaluate local model
         ii = np.arange(0,240,48); count = 0
-        final_pred = torch.zeros(pred_global.shape).cuda()
-        hidden_mask = torch.zeros(pred_global.shape).cuda()
+        final_pred = torch.zeros(pred_global.shape)
+        hidden_mask = torch.zeros(pred_global.shape)
+        if train_on_gpu:
+            final_pred = final_pred.cuda()
+            hidden_mask = hidden_mask.cuda()
         if torch.max(pred_global).item()<.5:
-            final_pred = torch.zeros(pred_global.shape).cuda()
+            final_pred = torch.zeros(pred_global.shape)
         else:
             for i in ii:
                 for j in ii:
                     for k in ii:
                         patch = pred_global[:,:,i:i+64,j:j+64,k:k+64]
-                        if torch.sum(patch).item()<.5*2**3:
+                        if torch.sum(patch).item()<.5*3**3:
                             continue;
                         else:
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
@@ -77,14 +83,15 @@ def evaluate(model_global, model_local,source_file):
                             hidden_mask[:,:,i:i+64,j:j+64,k:k+64] += 1
                             count += 1
             final_pred = final_pred / torch.clip(hidden_mask,1,1e7)
-                        
+        
+        
         result = final_pred[0,0].cpu().detach().numpy()
         return(result.astype(np.float32),aff_mat)
                         
                         
 
 
-def predict_folder_pixel_abs(input_folder, target_folder, task):
+def predict_folder_pixel_abs(input_folder, target_folder, task, model_global, model_local):
     for f in os.listdir(input_folder):
 
         source_file = os.path.join(input_folder, f)
@@ -99,7 +106,7 @@ def predict_folder_pixel_abs(input_folder, target_folder, task):
         print(target_file)
 
 
-def predict_folder_sample_abs(input_folder, target_folder):
+def predict_folder_sample_abs(input_folder, target_folder, model_global, model_local):
     for f in os.listdir(input_folder):
         source_file = os.path.join(input_folder, f)
 
@@ -149,9 +156,9 @@ if __name__ == "__main__":
         model_local.load_state_dict(torch.load('/weights/weights_%s_local.pt'%task, map_location='cpu'))
 
     if mode == "pixel":
-        predict_folder_pixel_abs(input_dir, output_dir, task)
+        predict_folder_pixel_abs(input_dir, output_dir, task,model_global, model_local)
     elif mode == "sample":
-        predict_folder_sample_abs(input_dir, output_dir)
+        predict_folder_sample_abs(input_dir, output_dir, model_global, model_local)
     else:
         print("Mode not correctly defined. Either choose 'pixel' oder 'sample'")
 

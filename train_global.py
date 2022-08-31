@@ -89,7 +89,7 @@ test_dataset = MedicalDataset(
 
 #the considered loss function is the DiceLoss
 criterion = DiceLoss(evaluation_mode = False)
-criterion_val = DiceLoss(evaluation_mode = True)
+criterion_val = DiceLoss(evaluation_mode = False)
 
 #the output channel size of the first convolution equals 32
 model = unet(n_channels =1, f_size=32)

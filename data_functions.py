@@ -275,87 +275,74 @@ class MedicalDataset(Dataset):
             subs = 2
         else:
             subs = 1
-        if self.datatype == 'final':
-            image_name = self.img_ids[idx]
-            image_path = os.path.join(self.img_folder , image_name)
-            nifti = nib.load(image_path)
-            data = nifti.get_fdata()[::subs,::subs,::subs]
-            aff_mat = nifti.affine
-            
-            target_path = os.path.join(self.tar_folder , image_name)
-            nifti = nib.load(target_path)
-            tar = nifti.get_fdata()
-            
-            return np.expand_dims(data,0),np.expand_dims(tar,0),aff_mat
+ 
+        #generate the image path
+        image_name = self.img_ids[idx]
+        image_path = os.path.join(self.img_folder , image_name)
         
+        
+        #load the nifti file (affine matrix is omitted here)
+        nifti = nib.load(image_path)
+        data = nifti.get_fdata()[::subs,::subs,::subs]
+        data /= np.quantile(data,.98)
+        aff_mat = nifti.affine
+        
+        
+        #define the random mask
+        rand_mask = generate_random_mask(dim=data.shape[0],
+                                    shape_prop=[.5,.5])
+        if np.sum(rand_mask[data>=0.05]) < (16**3) or np.random.rand()<.05: 
+            rand_mask = np.zeros((data.shape[0],
+                                  data.shape[1], data.shape[2])).astype(np.uint8) 
+        #according to challenge page no guarantee that components lie within the
+        # investigated object
+        
+        type_of_per = np.random.choice(['rand_int','gauss_noise',
+                                        'scale_int','sobel'])
+        
+        if type_of_per == 'rand_int':
+            per_data = random_intensity(data,rand_mask)
+        elif type_of_per == 'gauss_noise':
+            per_data = add_gaussian_noise(data,rand_mask)
+        elif type_of_per == 'rand_conv':
+            rand_mask[data<0.05] = 0
+            per_data = random_convolution(data,rand_mask)
+        elif type_of_per == 'scale_int':
+            rand_mask[data<0.05] = 0
+            per_data = scale_intensity(data,rand_mask)
+        elif type_of_per == 'sobel':
+            rand_mask[data<0.05] = 0
+            per_data = apply_sobel_filter(data,rand_mask)
         else:
-            #generate the image path
-            image_name = self.img_ids[idx]
-            image_path = os.path.join(self.img_folder , image_name)
-            
-            
-            #load the nifti file (affine matrix is omitted here)
-            nifti = nib.load(image_path)
-            data = nifti.get_fdata()[::subs,::subs,::subs]
-            data /= np.quantile(data,.98)
-            aff_mat = nifti.affine
-            
-            
-            #define the random mask
-            rand_mask = generate_random_mask(dim=data.shape[0],
-                                        shape_prop=[.5,.5])
-            if np.sum(rand_mask[data>=0.05]) < (16**3) or np.random.rand()<.05: 
-                rand_mask = np.zeros((data.shape[0],
-                                      data.shape[1], data.shape[2])).astype(np.uint8) 
-            #according to challenge page no guarantee that components lie within the
-            # investigated object
-            
-            type_of_per = np.random.choice(['rand_int','gauss_noise',
-                                            'scale_int','sobel'])
-            
-            if type_of_per == 'rand_int':
-                per_data = random_intensity(data,rand_mask)
-            elif type_of_per == 'gauss_noise':
-                per_data = add_gaussian_noise(data,rand_mask)
-            elif type_of_per == 'rand_conv':
-                rand_mask[data<0.05] = 0
-                per_data = random_convolution(data,rand_mask)
-            elif type_of_per == 'scale_int':
-                rand_mask[data<0.05] = 0
-                per_data = scale_intensity(data,rand_mask)
-            elif type_of_per == 'sobel':
-                rand_mask[data<0.05] = 0
-                per_data = apply_sobel_filter(data,rand_mask)
+            print('Problem with data perturbations'); pass;
+        
+        #when evaluating on provided toy data, no perturbations are needed for 
+        #the input instances, i.e. disturb_input is set to FALSE during testing
+        if self.disturb_input:
+            #scale the data to [64,64,64]
+            if self.reduce_dim:
+                fac = int(per_data.shape[0]/64)
+                #per_data = block_reduce(per_data, (fac,fac,fac), np.mean)
+                #rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.max)
+                per_data = per_data[::fac,::fac,::fac]
+                rand_mask = rand_mask[::fac,::fac,::fac]
+                
+            if self.affine_matrix:
+                return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0),aff_mat
             else:
-                print('Problem with data perturbations'); pass;
-            
-            #when evaluating on provided toy data, no perturbations are needed for 
-            #the input instances, i.e. disturb_input is set to FALSE during testing
-            if self.disturb_input:
-                #scale the data to [64,64,64]
-                if self.reduce_dim:
-                    fac = int(per_data.shape[0]/64)
-                    #per_data = block_reduce(per_data, (fac,fac,fac), np.mean)
-                    #rand_mask = block_reduce(rand_mask, (fac,fac,fac), np.max)
-                    per_data = per_data[::fac,::fac,::fac]
-                    rand_mask = rand_mask[::fac,::fac,::fac]
-                    
-                if self.affine_matrix:
-                    return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0),aff_mat
-                else:
-                    return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0)
-                    
+                return np.expand_dims(per_data,0), np.expand_dims(rand_mask,0)
+                
+        else:
+            if self.reduce_dim:
+                fac = int(data.shape[0]/64)
+                #data = block_reduce(data, (fac,fac,fac), np.mean)   
+                data = data[::fac,::fac,::fac]
+                
+            data = np.expand_dims(data,0)
+            if self.affine_matrix:
+                return data, data, aff_mat
             else:
-                if self.reduce_dim:
-                    fac = int(data.shape[0]/64)
-                    #data = block_reduce(data, (fac,fac,fac), np.mean)   
-                    data = data[::fac,::fac,::fac]
-                    
-                data = np.expand_dims(data,0)
-                if self.affine_matrix:
-                    return data, data, aff_mat
-                else:
-                    return data, data
+                return data, data
 
     def __len__(self):
         return(len(self.img_ids))

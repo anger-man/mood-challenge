@@ -18,7 +18,6 @@ from torch.utils.data import TensorDataset, DataLoader, Dataset
 import gc, os
 import numpy as np
 import nibabel as nib
-import matplotlib.pyplot as plt
 from tqdm import tqdm as tq
 from scipy.ndimage import rotate
 import time

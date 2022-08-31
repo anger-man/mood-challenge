@@ -99,7 +99,7 @@ test_dataset = MedicalDataset(
 
 #the considered loss function is the DiceLoss
 criterion = DiceLoss(evaluation_mode = False)
-criterion_val = DiceLoss(evaluation_mode = True)
+criterion_val = DiceLoss(evaluation_mode = False)
 
 
 #option to use the prediction of the global network as second channel.
@@ -200,7 +200,7 @@ for epoch in range(1, n_epochs+1):
         subjects_dataset = tio.SubjectsDataset(subject_list)
         sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:2, 1:8})
         patches_queue = tio.data.Queue(subjects_dataset=subjects_dataset, max_length = 48, 
-                                       samples_per_volume= 8, sampler = sampler)
+                                       samples_per_volume= 12, sampler = sampler)
         patches_loader = DataLoader(patches_queue, batch_size = patch_bs, num_workers=0)
         
         for patch_subject in patches_loader:
@@ -254,7 +254,7 @@ for epoch in range(1, n_epochs+1):
             subjects_eval_dataset = tio.SubjectsDataset(subject_eval_list)
             sampler = tio.data.LabelSampler(patch_size = 64, label_probabilities = {0:2, 1:8})
             patches_eval_queue = tio.data.Queue(subjects_dataset=subjects_eval_dataset,
-                                                max_length=48, samples_per_volume=8, sampler=sampler)
+                                                max_length=48, samples_per_volume=12, sampler=sampler)
             
             patches_loader = DataLoader(patches_eval_queue, batch_size = patch_bs, num_workers=0)
             

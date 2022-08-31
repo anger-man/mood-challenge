@@ -10,7 +10,7 @@ Created on Mon Aug  1 16:26:02 2022
 
 # define the task [brain,abdom] and the corresponding data directory
 
-task = 'abdom'
+task = 'brain'
 data_path = 'data/%s'%task
 
 #%%
@@ -45,7 +45,7 @@ train_on_gpu = torch.cuda.is_available()
 
 #generate evaluation data
 
-# #only use samples that have been unseen during training
+#only use samples that have been unseen during training
 # vali_ids = np.sort(os.listdir(os.path.join(data_path,'%s_train'%task)))[::6]
 # vali_dataset = MedicalDataset(
 #     datatype = 'train',
@@ -138,10 +138,11 @@ def evaluate(model_global, model_local):
     else:
         subs = 1
        
-    for itera in range(len(input_ids[:40])):
+    for itera in range(len(input_ids[:50])):
         #load target
         nifti = nib.load(target_ids[itera])
         target = nifti.get_fdata()[::subs,::subs,::subs].astype(np.uint8)
+        ta = target.copy()
         sg.append(target.max())
         target = torch.from_numpy(target)
         target = target.unsqueeze(0).unsqueeze(0)
@@ -149,6 +150,7 @@ def evaluate(model_global, model_local):
         #load input
         nifti = nib.load(input_ids[itera])
         data = nifti.get_fdata()[::subs,::subs,::subs]
+        data /= np.quantile(data,.98)
         dim = data.shape[0]
         aff_mat = nifti.affine
         fac = int(dim/64)
@@ -167,14 +169,17 @@ def evaluate(model_global, model_local):
             pred_global = model_global(img_down)[0]
         up = nn.Upsample(scale_factor = fac)
         pred_global = up(pred_global)
+        pg = pred_global.cpu().detach().numpy()[0,0]
         loss_global = criterion(pred_global, target).item()
         # ap_global = average_precision(pred_global.reshape(-1),target.reshape(-1)).item()
         
         #evaluate local model
         ii = np.arange(0,240,48); count = 0
         final_pred = torch.zeros(pred_global.shape).cuda()
-        # final_pred = pred_global.clone()
         hidden_mask = torch.zeros(pred_global.shape).cuda()
+        # if train_on_gpu:
+        #     final_pred = final_pred.cuda()
+        #     hidden_mask = hidden_mask.cuda()
         if torch.max(pred_global).item()<.5:
             final_pred = torch.zeros(pred_global.shape).cuda()
         else:
@@ -182,7 +187,7 @@ def evaluate(model_global, model_local):
                 for j in ii:
                     for k in ii:
                         patch = pred_global[:,:,i:i+64,j:j+64,k:k+64]
-                        if torch.sum(patch).item()<.5*2**3:
+                        if torch.sum(patch).item()<.5*2.5**3:
                             continue;
                         else:
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
@@ -199,7 +204,7 @@ def evaluate(model_global, model_local):
         print('%.3f  %.3f  %03d' %(loss_global,loss_final, count))
         
         result = final_pred[0,0].cpu().detach().numpy()
-        if -np.sort(-result.reshape(-1))[9**3]>.5:
+        if -np.sort(-result.reshape(-1))[14**3]>.5:
             sf.append(1)
         else:
             sf.append(0)
