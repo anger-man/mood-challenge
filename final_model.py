@@ -114,7 +114,7 @@ model_global.load_state_dict(torch.load('weights/weights_%s_global.pt'%task))
 model_local = unet(n_channels = 2, f_size=32)
 if train_on_gpu:
     model_local.cuda()
-model_local.load_state_dict(torch.load('weights/weights_%s_local.pt'%task))
+model_local.load_state_dict(torch.load('weights/weights_%s_local_0.pt'%task))
 
 #define a index for the plots and saved model parameters
 dt = datetime.now()
@@ -134,7 +134,7 @@ def evaluate(model_global, model_local):
     sg = []; sf = []
     
     if task == 'abdom':
-        subs = 2
+        subs = 1
     else:
         subs = 1
        
@@ -180,14 +180,14 @@ def evaluate(model_global, model_local):
         # if train_on_gpu:
         #     final_pred = final_pred.cuda()
         #     hidden_mask = hidden_mask.cuda()
-        if torch.max(pred_global).item()<.5:
+        if torch.sum(pred_global).item()<.95*8**3 or torch.max(pred_global).item()<.95:
             final_pred = torch.zeros(pred_global.shape).cuda()
         else:
             for i in ii:
                 for j in ii:
                     for k in ii:
                         patch = pred_global[:,:,i:i+64,j:j+64,k:k+64]
-                        if torch.sum(patch).item()<.5*2.5**3:
+                        if torch.sum(patch).item()<.95*3**3:
                             continue;
                         else:
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
@@ -204,21 +204,21 @@ def evaluate(model_global, model_local):
         print('%.3f  %.3f  %03d' %(loss_global,loss_final, count))
         
         result = final_pred[0,0].cpu().detach().numpy()
-        if -np.sort(-result.reshape(-1))[14**3]>.5:
-            sf.append(1)
-        else:
-            sf.append(0)
+        sf.append(np.clip(.5*np.sum(result)/(12**3),0,1))
+
     return GLOBAL,FINAL,np.array(sg),np.array(sf)
                     
 g,f,sg,sf = evaluate(model_global,model_local)
 print(np.sum(2*sg*sf)/(np.sum(sg)+np.sum(sf)))
 
-#0.123 (40 samples, brain, 48 overlapping), sample acc. 0.98
-#0.120 (40 samples, brain, 32 overlapping), sample acc. 0.98
-#0.127 if non-overlapping , sample acc. 0.98
+#0.13 (50 samples, brain, 48 overlapping), sample acc. 0.97
+#using .95 threshold: 0.09, sample ac: 0.97
+#final brain 0.07, sample ac: 0.97
 
 
-#0.212 (40 samples, abdom, 48 overlapping), sample acc. 1.0
-#0.213 (40 samples, abdom, 32 overlapping), sample acc. 1.0
-#0.223 if non-overlapping , sample acc. 1.0
+#0.15 (50 samples, abdom, 48 overlapping), sample acc. .99
+#0.16 (50 samples, abdom, 64 overlapping), sample acc. .99
+#using .95 threshold: 0.13, sample ac: 0.98
+#final abdom: 0.099, sample ac: 1.0
+
 

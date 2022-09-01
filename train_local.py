@@ -37,7 +37,7 @@ import optparse
 #%%
 
 parser = optparse.OptionParser()
-parser.add_option('--task', action="store", dest="task",default='brain')
+parser.add_option('--task', action="store", dest="task",default='abdom')
 options,args = parser.parse_args()
 task = options.task
 use_global = True

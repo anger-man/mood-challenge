@@ -33,7 +33,7 @@ import optparse
 #%%
 
 parser = optparse.OptionParser()
-parser.add_option('--task', action="store", dest="task",default='brain')
+parser.add_option('--task', action="store", dest="task",default='abdom')
 options,args = parser.parse_args()
 
 #%%
@@ -98,6 +98,7 @@ model = unet(n_channels =1, f_size=32)
 if train_on_gpu:
     model.cuda()
 summary(model, (1,64,64,64))
+model.load_state_dict(torch.load('weights/weights_%s_global.pt'%task))
 #we use Adam algorithm, the lr is already fine-tuned
 optimizer = torch.optim.Adam(model.parameters(), lr=4e-4)
 scheduler = torch.optim.lr_scheduler.ReduceLROnPlateau(optimizer, factor=0.2, patience=5, cooldown=3)
@@ -113,7 +114,7 @@ index = '%d%d%d_%d%d_global'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 
 torch.cuda.empty_cache()
 gc.collect()
-batch_size = 6
+batch_size = 4
 
 train_loader = DataLoader(
     train_dataset, batch_size=batch_size, shuffle=True,

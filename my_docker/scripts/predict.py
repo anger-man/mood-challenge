@@ -66,14 +66,14 @@ def evaluate(model_global, model_local,source_file):
         if train_on_gpu:
             final_pred = final_pred.cuda()
             hidden_mask = hidden_mask.cuda()
-        if torch.max(pred_global).item()<.5:
+        if torch.sum(pred_global).item()<.95*8**3 or torch.max(pred_global).item()<.95:
             final_pred = torch.zeros(pred_global.shape)
         else:
             for i in ii:
                 for j in ii:
                     for k in ii:
                         patch = pred_global[:,:,i:i+64,j:j+64,k:k+64]
-                        if torch.sum(patch).item()<.5*3**3:
+                        if torch.sum(patch).item()<.95*3**3:
                             continue;
                         else:
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
@@ -111,10 +111,8 @@ def predict_folder_sample_abs(input_folder, target_folder, model_global, model_l
         source_file = os.path.join(input_folder, f)
 
         result, aff_mat = evaluate(model_global,model_local,source_file)
-        if -np.sort(-result.reshape(-1))[9**3]>.5: #higher dice than 8**3
-            score = 1
-        else:
-            score = 0
+        score = np.clip(.5*np.sum(result)/(12**3),0,1)
+
             
         with open(os.path.join(target_folder, f + ".txt"), "w") as write_file:
             write_file.write(str(score))
@@ -151,9 +149,9 @@ if __name__ == "__main__":
     model_local = unet(n_channels = 2, f_size=32)
     if train_on_gpu:
         model_local.cuda()
-        model_local.load_state_dict(torch.load('/weights/weights_%s_local.pt'%task))
+        model_local.load_state_dict(torch.load('/weights/weights_%s_local_0.pt'%task))
     else:
-        model_local.load_state_dict(torch.load('/weights/weights_%s_local.pt'%task, map_location='cpu'))
+        model_local.load_state_dict(torch.load('/weights/weights_%s_local_0.pt'%task, map_location='cpu'))
 
     if mode == "pixel":
         predict_folder_pixel_abs(input_dir, output_dir, task,model_global, model_local)
