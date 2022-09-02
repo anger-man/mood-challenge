@@ -111,10 +111,15 @@ if train_on_gpu:
 model_global.load_state_dict(torch.load('weights/weights_%s_global.pt'%task))
 
 
-model_local = unet(n_channels = 2, f_size=32)
+model_local_0 = unet(n_channels = 2, f_size=32)
+model_local_1 = unet(n_channels = 2, f_size=32)
+
 if train_on_gpu:
-    model_local.cuda()
-model_local.load_state_dict(torch.load('weights/weights_%s_local_0.pt'%task))
+    model_local_0.cuda()
+    model_local_1.cuda()
+model_local_0.load_state_dict(torch.load('weights/weights_%s_local_0.pt'%task))
+model_local_1.load_state_dict(torch.load('weights/weights_%s_local_1.pt'%task))
+
 
 #define a index for the plots and saved model parameters
 dt = datetime.now()
@@ -127,9 +132,10 @@ index = '%d%d%d_%d%d_final'%(dt.year,dt.month,dt.day,dt.hour,dt.minute)
 # validate the model on data with random masks #
 ################################################
 
-def evaluate(model_global, model_local):
+def evaluate(model_global, model_local_0,model_local_1):
     model_global.eval() 
-    model_local.eval()
+    model_local_0.eval()
+    model_local_1.eval()
     GLOBAL = 0.0; FINAL = 0.0; save_data = 0
     sg = []; sf = []
     
@@ -192,7 +198,9 @@ def evaluate(model_global, model_local):
                         else:
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
                             with torch.no_grad():
-                                tmp = model_local(inp_data)[0]
+                                tmp0 = model_local_0(inp_data)[0]
+                                tmp1 = model_local_1(inp_data)[0]
+                                tmp = .4*tmp0+.6*tmp1
                             final_pred[:,:,i:i+64,j:j+64,k:k+64] += tmp
                             hidden_mask[:,:,i:i+64,j:j+64,k:k+64] += 1
                             count += 1
@@ -208,7 +216,7 @@ def evaluate(model_global, model_local):
 
     return GLOBAL,FINAL,np.array(sg),np.array(sf)
                     
-g,f,sg,sf = evaluate(model_global,model_local)
+g,f,sg,sf = evaluate(model_global,model_local_0,model_local_1)
 print(np.sum(2*sg*sf)/(np.sum(sg)+np.sum(sf)))
 
 #0.13 (50 samples, brain, 48 overlapping), sample acc. 0.97

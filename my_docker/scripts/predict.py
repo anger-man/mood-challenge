@@ -28,9 +28,10 @@ from models import unet
 
 #%%
 
-def evaluate(model_global, model_local,source_file):
+def evaluate(model_global, model_local_0,model_local_1,source_file):
     model_global.eval() 
-    model_local.eval()
+    model_local_0.eval()
+    model_local_1.eval()
    
     for itera in range(1):
         #load input
@@ -78,7 +79,9 @@ def evaluate(model_global, model_local,source_file):
                         else:
                             inp_data = torch.cat((data[:,:,i:i+64,j:j+64,k:k+64],patch),1)
                             with torch.no_grad():
-                                tmp = model_local(inp_data)[0]
+                                tmp0 = model_local_0(inp_data)[0]
+                                tmp1 = model_local_1(inp_data)[0]
+                                tmp = .4*tmp0 + .6*tmp1
                             final_pred[:,:,i:i+64,j:j+64,k:k+64] += tmp
                             hidden_mask[:,:,i:i+64,j:j+64,k:k+64] += 1
                             count += 1
@@ -91,13 +94,13 @@ def evaluate(model_global, model_local,source_file):
                         
 
 
-def predict_folder_pixel_abs(input_folder, target_folder, task, model_global, model_local):
+def predict_folder_pixel_abs(input_folder, target_folder, task, model_global, model_local_0,model_local_1):
     for f in os.listdir(input_folder):
 
         source_file = os.path.join(input_folder, f)
         target_file = os.path.join(target_folder, f)
 
-        result, aff_mat = evaluate(model_global,model_local,source_file)
+        result, aff_mat = evaluate(model_global,model_local_0,model_local_1,source_file)
 
         if task == 'abdom':
             result = result.repeat(2,axis=0).repeat(2,axis=1).repeat(2,axis=2)
@@ -106,11 +109,11 @@ def predict_folder_pixel_abs(input_folder, target_folder, task, model_global, mo
         print(target_file)
 
 
-def predict_folder_sample_abs(input_folder, target_folder, model_global, model_local):
+def predict_folder_sample_abs(input_folder, target_folder, model_global, model_local_0,model_local_1):
     for f in os.listdir(input_folder):
         source_file = os.path.join(input_folder, f)
 
-        result, aff_mat = evaluate(model_global,model_local,source_file)
+        result, aff_mat = evaluate(model_global,model_local_0,model_local_1,source_file)
         score = np.clip(.5*np.sum(result)/(12**3),0,1)
 
             
@@ -146,17 +149,20 @@ if __name__ == "__main__":
         model_global.load_state_dict(torch.load('/weights/weights_%s_global.pt'%task, map_location='cpu'))
     
 
-    model_local = unet(n_channels = 2, f_size=32)
+    model_local_0 = unet(n_channels = 2, f_size=32)
+    model_local_1 = unet(n_channels = 2, f_size=32)
     if train_on_gpu:
-        model_local.cuda()
-        model_local.load_state_dict(torch.load('/weights/weights_%s_local_0.pt'%task))
+        model_local_0.cuda(); model_local_1.cuda()
+        model_local_0.load_state_dict(torch.load('/weights/weights_%s_local_0.pt'%task))
+        model_local_1.load_state_dict(torch.load('/weights/weights_%s_local_1.pt'%task))
     else:
-        model_local.load_state_dict(torch.load('/weights/weights_%s_local_0.pt'%task, map_location='cpu'))
+        model_local_0.load_state_dict(torch.load('/weights/weights_%s_local_0.pt'%task, map_location='cpu'))
+        model_local_1.load_state_dict(torch.load('/weights/weights_%s_local_1.pt'%task, map_location='cpu'))
 
     if mode == "pixel":
-        predict_folder_pixel_abs(input_dir, output_dir, task,model_global, model_local)
+        predict_folder_pixel_abs(input_dir, output_dir, task,model_global, model_local_0,model_local_1)
     elif mode == "sample":
-        predict_folder_sample_abs(input_dir, output_dir, model_global, model_local)
+        predict_folder_sample_abs(input_dir, output_dir, model_global, model_local_0,model_local_1)
     else:
         print("Mode not correctly defined. Either choose 'pixel' oder 'sample'")
 
