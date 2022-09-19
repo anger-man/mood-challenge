@@ -1,0 +1,209 @@
+%% Begin slides template file
+\documentclass[8pt,t,usepdftitle=false,aspectratio=169]{beamer}
+%% ------------------------------------------------------------------
+%% - aspectratio=43: Set paper aspect ratio to 4:3.
+%% - aspectratio=169: Set paper aspect ratio to 16:9.
+%% ------------------------------------------------------------------
+
+\usetheme[nototalframenumber,foot,logo]{uibk}
+%% ------------------------------------------------------------------
+%% - foot: Add a footer line for conference name and date.
+%% - logo: Add the university logo in the footer (only if 'foot' set).
+%% - bigfoot/sasquatch: Larger font size in footer.
+%% - nototalslidenumber: Hide the total number of slides (only if 'foot' set)
+%% - license: Add CC-BY license symbol to title slide (e.g., for conference uploads)
+%%   (TODO: At the moment no other licenses are supported.)
+%% - licenseall: Add CC-BY license symbol to all subsequent slides slides
+%% - url: use \url{} rather than \href{} on the title page
+%% ------------------------------------------------------------------
+
+%% ------------------------------------------------------------------
+%% The official corporate colors of the university are predefined and
+%% can be used for e.g., highlighting something. Simply use
+%% \color{uibkorange} or \begin{color}{uibkorange} ... \end{color}
+%% Defined colors are:
+%% - uibkblue, uibkbluel, uibkorange, uibkorangel, uibkgray, uibkgraym, uibkgrayl
+%% The frametitle color can be easily adjusted e.g., to black with
+%% \setbeamercolor{titlelike}{fg=black}
+%% ------------------------------------------------------------------
+
+%\setbeamercolor{verbcolor}{fg=uibkorange}
+%% ------------------------------------------------------------------
+%% Setting a highlight color for verbatim output such as from
+%% the commands \pkg, \email, \file, \dataset 
+%% ------------------------------------------------------------------
+
+
+%% information for the title page ('short title' is the pdf-title that is shown in viewer's titlebar)
+\title[]{Inpainting Masks}
+\subtitle{}
+\URL{https://applied-math.uibk.ac.at/}
+
+\author[Simon G\"oppel]{Simon G\"oppel}
+%('short author' is the pdf-metadata Author)
+%% If multiple authors are required and the font size is too large you
+%% can overrule the font size of author and url by calling:
+%\setbeamerfont{author}{size*={10pt}{10pt},series=\mdseries}
+%\setbeamerfont{url}{size*={10pt}{10pt},series=\mdseries}
+%\URL{}
+%\subtitle{}
+
+\footertext{Inpainting Masks}
+\date{}
+
+\headerimage{4}
+
+\usepackage{subcaption}
+\usepackage{wrapfig}
+\usepackage{tikz}
+\usepackage{enumitem}   
+\usepackage{braket}
+\usepackage{color}
+\usepackage{mathtools}
+\usepackage{amssymb}
+\usepackage{amsthm}
+\usepackage{amsmath}
+\usepackage{amsfonts}
+\usepackage{dsfont}
+\usepackage{tikz-cd}
+\usepackage{xcolor}
+\usepackage{graphicx}
+\usepackage[style=verbose,backend=bibtex]{biblatex}
+
+
+\newcommand\gauss[2]{1/(#2*sqrt(2*pi))*exp(-((x-#1)^2)/(2*#2^2))} 
+\newcommand{\paren}[1]{\left(#1\right)}               % Klammern
+\newcommand{\bparen}[1]{\left[#1\right]}               % eckige Klammern
+\newcommand{\sparen}[1]{\left\{#1\right\}}		      % Mengenklammer
+\newcommand{\sqparen}[1]{\left[#1\right]}             % eckige Klammern
+\newcommand{\h}[1]{\left\langle#1\right\rangle}       % Skalarprodukt
+\newcommand{\abs}[1]{\left|#1\right|}
+\newcommand{\norm}[1]{\left\lVert#1\right\rVert} 
+%\newcommand{\spn}[1]{\textup{span}\left\{#1\right\}} 
+
+%Zahlbereiche
+\newcommand{\C}{\mathds C}
+\newcommand{\D}{\mathds D}
+\newcommand{\N}{\mathds N}
+\newcommand{\Q}{\mathds Q}
+\newcommand{\R}{\mathds R}
+\newcommand{\U}{\mathds U}
+\newcommand{\V}{\mathds V}
+\newcommand{\X}{\mathds X}
+\newcommand{\Y}{\mathds Y}
+\newcommand{\Z}{\mathds Z}
+
+
+
+%\addtolength{\tabcolsep}{-10pt} 
+\begin{document}
+
+%% ALTERNATIVE TITLEPAGE
+%% The next block is how you add a titlepage with the 'nosectiontitlepage' option, which switches off
+%% the default behavior of creating a titlepage every time a \section{} is defined.
+%% Then you can use \section{} as it's originally intended, including a table of contents.
+% \usebackgroundtemplate{\includegraphics[width=\paperwidth,height=\paperheight]{uibk_header1.png}}
+% \begin{frame}[plain]
+%     \titlepage
+% \end{frame}
+% \addtocounter{framenumber}{-1}
+% \usebackgroundtemplate{}
+
+%% Table of Contents, if wanted:
+%% this requires the 'nosectiontitlepage' option and setting \section{}'s as you want them to appear here.
+%% Subsections and subordinates are suppressed in the .sty at the moment, search
+%% for \setbeamertemplate{subsection} and replace the empty {} with whatever you want.
+%% Although it's probably too much for a presentation, maybe for a lecture.
+% \begin{frame}
+%     \vspace*{1cm plus 1fil}
+%     \tableofcontents
+%     \vspace*{0cm plus 1fil}
+% \end{frame}
+
+
+
+\section{Bookmark Title}
+
+
+%\begin{frame}
+%\frametitle{Overview}
+%\vfill
+%\begin{enumerate}[align=left, label={\color{gray}$\blacktriangleright$}]
+%\setlength{\itemindent}{2em}
+%\item Motivation
+%\item Frames and Results on the Radon transform
+%\item Own approach via convolutional frames
+%\item Current Topics
+%\end{enumerate}
+%\end{frame}
+
+
+
+\begin{frame}
+\frametitle{Inpainting Masks: Ellipsoids}
+\vfill
+\begin{minipage}{0.5\textwidth}
+An ellipsoid is defind by the equation
+\begin{equation*}
+E_{abc}^{t} \colon \quad \frac{(x_1-t_1)^2}{a} + \frac{(x_2-t_2)^2}{b} + \frac{(x_2-t_3)^2}{c} \leq 1,
+\end{equation*}
+where $t = (t_1, t_2, t_3)$. Each single ellipsoid is shown in the Figure. Parameters $a,b,c\in\N$ and $t_i \in \R$ where generated in a random fashion and each ellipse was rotated by a random angle between $0^\circ$ to $90^\circ$ before adding to the full mask. This was iterated until the number of pixels that lie inside an elliposid exceeded a manually set threshold.
+\end{minipage}
+\hspace{1cm}
+\begin{minipage}{0.4\textwidth}
+\phantom{abc}\\
+\begin{figure}[htb] \centering
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s1_1}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s2_1}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s3_1}\\[0.2em]
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s1_2}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s2_2}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s3_2}
+\caption{Visualization of 3D ellipsoid inpainting masks. The projections onto the first, second and third axis, respectively.}
+\label{fig:ellipses}
+\end{figure}
+\end{minipage}
+\vfill
+\end{frame}
+
+
+
+\begin{frame}
+\frametitle{Inpainting Masks: $\alpha$-shapes}
+\vfill
+\begin{minipage}{0.5\textwidth}
+First, we randomly select a number of points $x_i, i=1,\ldots N$, that satisfy
+\begin{equation*}
+\epsilon_1 \leq \norm{x_i - x_j}_2 \leq \epsilon_2,
+\end{equation*}
+for all $i,j=1,\ldots, N$ and manually chosen $\epsilon_1, \epsilon_2 > 0$.
+We then used the Python package $\alpha$-shape\footnote{\url{https://pypi.org/project/alphashape/}} to create the $\alpha$-shape of the set $\sparen{x_1, \ldots x_N}$. For $\alpha = 0$, the algorithm producedes the convex hull. Examples on the right where calculated for $\alpha=3$.
+\end{minipage}
+\hspace{1cm}
+\begin{minipage}{0.4\textwidth}
+\phantom{abc}\\
+\begin{figure}[htb] \centering
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s1_1_concave}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s2_1_concave}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s3_1_concave}\\[0.2em]
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s1_2_concave}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s2_2_concave}
+         \includegraphics[height=0.3\textwidth, width=0.3\columnwidth]{images/s3_2_concave}
+\caption{Visualization of concave inpainting masks. Two examples are shown in the top and bottom row. The projections onto the first, second and third axis, respectively.}
+\label{fig:ellipses}
+\end{figure}
+\end{minipage}
+\vfill
+\end{frame}
+
+
+%%%%%%%%%%%%%%%%%%%%%%%%%%%
+%% to show a last slide similar to the title slide: information for the last page
+\title{Thank you for your attention!}
+\subtitle{}
+\author{}
+\section{Thanks}
+
+
+
+\end{document}

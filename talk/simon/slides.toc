@@ -1,0 +1,2 @@
+\beamer@sectionintoc {1}{Bookmark Title}{1}{0}{1}
+\beamer@sectionintoc {2}{Thanks}{4}{0}{2}
