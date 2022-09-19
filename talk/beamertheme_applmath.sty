@@ -270,7 +270,7 @@
      \usebeamercolor[fg]{structure}
      \ifframelogo
         % Different spacing as the image comes with white margins
-        \hspace{3.3mm}\raisebox{-.10\height}{\includegraphics[width=0.15\textwidth]{\myfooterlogoimage}}\hspace{0.02\textwidth}
+        \hspace{5.3mm}\raisebox{-.10\height}{\includegraphics[width=0.15\textwidth]{\myfooterlogoimage}}\hspace{0.02\textwidth}
      \else
         \hspace{10mm}
          {\rule[0em]{0pt}{4.5mm}}%
@@ -381,7 +381,7 @@
     	\node[xshift=-1mm,yshift=1mm] at (current page.north west) {
     		% Ignore title page logo on all title slides which are not slide 1
     		
-    		\includegraphics[width=1.2\textwidth]{\mylogoimage}%
+    		\includegraphics[width=1.2\textwidth]{\my}%
     		
     	};
     	
@@ -391,7 +391,7 @@
     	
     	\end{tikzpicture}
     	
-    	%% Title/subtitle, author, URL
+    	%% Title/, author, URL
     	\vspace*{0.31\textwidth}
     	{%
     		\usebeamercolor[fg]{title}%
@@ -399,12 +399,7 @@
     		\inserttitle%
     	}%
     	
-    	{%
-    		\usebeamercolor[fg]{subtitle}%
-    		\usebeamerfont{subtitle}%
-    		\insertsubtitle%
-    		\medskip%
-    	}%
+    	
     	
     	\bigskip
     	
@@ -417,11 +412,28 @@
     	\medskip
     	
     	{%
+    		\usebeamercolor[fg]{subtitle}%
+    		\usebeamerfont{subtitle}%
+    		\insertsubtitle%
+    		
+    	}%
+    \medskip%
+    	
+    	{%
     		\usebeamercolor[fg]{url}%
     		\usebeamerfont{url}%
     		\href{\myURL}{\myURL}%
     		
     	}%
+    
+    \medskip
+    
+    {%
+    	\usebeamercolor[fg]{institute}%
+    	\usebeamerfont{institute}%
+    	\insertinstitute
+    	
+    }%
     	
     	
 	\end{frame}}
@@ -438,10 +450,10 @@
 		\begin{frame}
 			\begin{tikzpicture}[remember picture,overlay,anchor=north west,inner sep=0pt]
 			
-			\node[xshift=-1mm,yshift=1mm] at (current page.north west) {
+			\node[xshift=5mm,yshift=-.7mm] at (current page.north west) {
 				% Ignore title page logo on all title slides which are not slide 1
 				
-				\includegraphics[width=1.2\textwidth]{\mylogoimage}%
+				\includegraphics[width=.4\textwidth]{\mylogoimage}%
 				
 			};
 			
@@ -459,12 +471,7 @@
 				\inserttitle%
 			}%
 			
-			{%
-				\usebeamercolor[fg]{subtitle}%
-				\usebeamerfont{subtitle}%
-				\insertsubtitle%
-				\medskip%
-			}%
+			
 			
 			\bigskip
 			
@@ -473,6 +480,14 @@
 				\usebeamerfont{author}%
 				\insertauthor%
 			}%
+		
+		\medskip
+		{%
+			\usebeamercolor[fg]{subtitle}%
+			\usebeamerfont{subtitle}%
+			\insertsubtitle%
+			%
+		}%
 			
 			\medskip
 			
@@ -502,10 +517,10 @@
 			\begin{frame}
 				\begin{tikzpicture}[remember picture,overlay,anchor=north west,inner sep=0pt]
 				
-				\node[xshift=-1mm,yshift=1mm] at (current page.north west) {
+					\node[xshift=5mm,yshift=-.6mm] at (current page.north west) {
 					% Ignore title page logo on all title slides which are not slide 1
 					
-					\includegraphics[width=1.2\textwidth]{\mylogoimage}%
+					\includegraphics[width=.4\textwidth]{\mylogoimage}%
 					
 				};
 				
@@ -533,15 +548,42 @@
 					\insertauthor%
 				}%
 				
-				\medskip
+				
 				
 				{%
 					\usebeamercolor[fg]{url}%
 					\usebeamerfont{url}%
-					\href{\myURL}{\myURL}%
+					\href{christoph.angermann@uibk.ac.at}{christoph.angermann@uibk.ac.at}%
 					
 				}%
 				
+				
+		\begin{tikzpicture}[remember picture,overlay,anchor=north west,inner sep=0pt]
+		\node[xshift=95mm,yshift=-47mm] at (current page.north west) {
+			% Ignore title page logo on all title slides which are not slide 1
+			
+			\includegraphics[width=0.14\textwidth]{_images/christoph.jpg}%
+			
+		};
+		\node[xshift=95mm,yshift=-68mm] at (current page.north west) {
+			% Ignore title page logo on all title slides which are not slide 1
+			
+			\includegraphics[width=0.14\textwidth]{_images/markus.jpg}%
+			
+		};
+	\node[xshift=116mm,yshift=-47mm] at (current page.north west) {
+		% Ignore title page logo on all title slides which are not slide 1
+		
+		\includegraphics[width=0.14\textwidth]{_images/simon.jpg}%
+		
+	};
+	\node[xshift=116mm,yshift=-68mm] at (current page.north west) {
+	% Ignore title page logo on all title slides which are not slide 1
+	
+	\includegraphics[width=0.14\textwidth]{_images/matthias.jpg}%
+	
+};
+		\end{tikzpicture}
 				
 		\end{frame}}
 		\addtocounter{framenumber}{-1}
@@ -682,10 +724,11 @@
 
 %% defaults
 \headerimage{1}
-\logoimage{applmath_header2.pdf}
+\logoimage{logo_uibkmed.pdf}
 \setfacultycolors{mip}
-\footerlogoimage{uibk_logo_4c_cmyk}
-\URL{https://applied-math.uibk.ac.at/}
+\footerlogoimage{logo_uibkmed}
+\subtitle{lol}
+\URL{}
 \footertext{}
 \date{}
 

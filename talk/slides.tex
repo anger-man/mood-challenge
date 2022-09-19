@@ -1,4 +1,4 @@
-\documentclass[8pt,aspectratio=169]{beamer}
+\documentclass[10pt,aspectratio=169]{beamer}
 
 
 %% foot adds a foot line to the frames including conference and date
@@ -21,10 +21,13 @@
 \usepackage[style=numeric, backend=bibtex,
 giveninits=true]{biblatex}
 \title[]{Self-Supervised Global-Local Segmentation for 3D Out-of-Distribution Detection}
-\subtitle{}
-\URL{https://applied-math.uibk.ac.at/}
+\subtitle{\textsuperscript{1}University of Innsbruck\\ \textsuperscript{2}Medical University of Innsbruck}
 
-\author[Angermann et al.]{Christoph Angermann \and Simon G\"oppel \and Markus Tiefenthaler \and Matthias Schwab}
+
+
+\author[Angermann et al.]{Christoph Angermann \inst{1} \and Simon Göppel \inst{1} \and Markus Tiefenthaler \inst{2} \and Matthias Schwab \inst{2}}
+
+
 %('short author' is the pdf-metadata Author)
 %% If multiple authors are required and the font size is too large you
 %% can overrule the font size of author and url by calling:
@@ -41,7 +44,6 @@ giveninits=true]{biblatex}
 \usepackage{subcaption}
 \usepackage{wrapfig}
 \usepackage{tikz}
-\usepackage{enumitem}   
 \usepackage{braket}
 \usepackage{color}
 \usepackage{mathtools}
@@ -77,6 +79,7 @@ giveninits=true]{biblatex}
 \newcommand{\X}{\mathds X}
 \newcommand{\Y}{\mathds Y}
 \newcommand{\Z}{\mathds Z}
+\addbibresource{literature.bib}   
 
 
 
@@ -107,21 +110,30 @@ giveninits=true]{biblatex}
 
 
 
-\section{Bookmark Title}
 
 
-%\begin{frame}
-%\frametitle{Overview}
-%\vfill
-%\begin{enumerate}[align=left, label={\color{gray}$\blacktriangleright$}]
-%\setlength{\itemindent}{2em}
-%\item Motivation
-%\item Frames and Results on the Radon transform
-%\item Own approach via convolutional frames
-%\item Current Topics
-%\end{enumerate}
-%\end{frame}
 
+\begin{frame}{Challenges}
+	\begin{itemize}
+		\item The nature of the anomalies in the test data set is not known
+		\item Very high dimensional input data resulting in very high computational costs
+	\end{itemize}
+	\pause \vspace{1.5em}
+	{\Large\textbf{Solutions:  }}\pause \vspace{1.5em}
+
+	\begin{itemize}
+		\item Consider medical out-of-distribution analysis as a segmentation problem \footfullcite{cho2021self} and generate a wide range of synthetic anomalies and corresponding ground truth masks. 
+		\item Global-local approach: 
+
+	\end{itemize}
+\end{frame}
+
+\begin{frame}{Method}
+\begin{figure}
+	\centering
+	\includegraphics[width=.78\columnwidth]{_figs/method-cropped.pdf}
+\end{figure}
+\end{frame}
 
 
 \begin{frame}
@@ -177,6 +189,55 @@ We then used the Python package $\alpha$-shape (\url{https://pypi.org/project/al
 \end{figure}
 \end{minipage}
 \vfill
+\end{frame}
+
+\begin{frame}{Perturbations}
+	\begin{minipage}{.45\columnwidth}
+		\begin{center}
+			
+			\begin{figure}
+				\textbf{random intensity}\\[.2em]
+				\includegraphics[width=.43\columnwidth]{_figs/int.png}\hfil
+				\includegraphics[width=.43\columnwidth]{_figs/intm.png}
+			\end{figure}\vspace{1em}
+			
+		\begin{figure}
+			\textbf{Gaussian noise}\\[.2em]
+			\includegraphics[width=.43\columnwidth]{_figs/gauss.png}\hfil
+			\includegraphics[width=.43\columnwidth]{_figs/gaussm.png}
+		\end{figure}
+		\end{center}
+	\end{minipage}\hfil
+\begin{minipage}{.45\columnwidth}
+	\begin{center}
+		\begin{figure}
+			\textbf{scaled intensity}\\[.2em]
+			\includegraphics[width=.43\columnwidth]{_figs/scale.png}\hfil
+			\includegraphics[width=.43\columnwidth]{_figs/scalem.png}
+		\end{figure}\vspace{1em}
+			
+		\begin{figure}
+			\textbf{Sobel filter}\\[.2em]
+			\includegraphics[width=.43\columnwidth]{_figs/sobel.png}\hfil
+			\includegraphics[width=.43\columnwidth]{_figs/sobelm.png}
+		\end{figure}
+	\end{center}
+\end{minipage}
+\end{frame}
+
+\begin{frame}{Limitations}
+	\begin{itemize}
+		\item By downsampling the data, some disturbances, such as Gaussian noise get reduced and are therefore harder to detect
+		\item Since the predictions only get refined in areas where the global prediction has exceeded a threshold of predicted out-of distribution pixels, it is possible that very small objects get overlooked
+		\item The variety of synthetic data is limited and could be insufficient for detecting certain naturally occurring anomalies
+	\end{itemize} \pause \vspace{1.5em}
+	
+	{\Large\textbf{Possible improvements: }}\pause \vspace{1em}
+	\begin{itemize}
+		\item Combine different downsampling methods
+		\item Increase the diversity of the synthetic anomalies
+	\end{itemize}
+	
 \end{frame}
 
 

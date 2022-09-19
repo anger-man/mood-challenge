@@ -83,6 +83,7 @@
       <file>slides-blx.bib</file>
     </requires>
     <requires type="editable">
+      <file>literature.bib</file>
     </requires>
     <requires type="static">
       <file>biblatex.bst</file>
