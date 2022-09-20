@@ -115,8 +115,8 @@ giveninits=true]{biblatex}
 
 \begin{frame}{Challenges}
 	\begin{itemize}
-		\item The nature of the anomalies in the test data set is not known
-		\item Very high dimensional input data resulting in very high computational costs
+		\item The nature of the anomalies in the test data set is not known.
+		\item High dimensional input data causes an enormous increase of computational costs.
 	\end{itemize}
 	\pause \vspace{1.5em}
 	{\Large\textbf{Solutions:  }}\pause \vspace{1.5em}
@@ -124,6 +124,10 @@ giveninits=true]{biblatex}
 	\begin{itemize}
 		\item Consider medical out-of-distribution analysis as a segmentation problem \footfullcite{cho2021self} and generate a wide range of synthetic anomalies and corresponding ground truth masks. 
 		\item Global-local approach: 
+		\begin{enumerate}
+			\item Get a global prediction on sub-sampled data.
+			\item Improve prediction locally on patches of original scale.
+		\end{enumerate}  
 
 	\end{itemize}
 \end{frame}
@@ -227,15 +231,15 @@ We then used the Python package $\alpha$-shape (\url{https://pypi.org/project/al
 
 \begin{frame}{Limitations}
 	\begin{itemize}
-		\item By downsampling the data, some disturbances, such as Gaussian noise get reduced and are therefore harder to detect
-		\item Since the predictions only get refined in areas where the global prediction has exceeded a threshold of predicted out-of distribution pixels, it is possible that very small objects get overlooked
-		\item The variety of synthetic data is limited and could be insufficient for detecting certain naturally occurring anomalies
+		\item Sub-sampling yields the issue that some disturbances, such as Gaussian noise, get reduced and are therefore harder to detect.
+		\item Since the predictions only get refined in areas where the global prediction has exceeded a threshold of predicted out-of distribution pixels, it is possible that very small objects are overlooked.
+		\item The variety of synthetic data is limited and could be insufficient for detecting certain naturally occurring anomalies.
 	\end{itemize} \pause \vspace{1.5em}
 	
 	{\Large\textbf{Possible improvements: }}\pause \vspace{1em}
 	\begin{itemize}
-		\item Combine different downsampling methods
-		\item Increase the diversity of the synthetic anomalies
+		\item Combine different downsampling methods.
+		\item Increase the diversity of the synthetic anomalies.
 	\end{itemize}
 	
 \end{frame}
